@@ -43,15 +43,19 @@
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
+  --primary: oklch(0.45 0.15 250);
+  --primary-foreground: oklch(0.99 0.002 240);
+  --sidebar-primary: oklch(0.45 0.15 250);
+  --sidebar-primary-foreground: oklch(0.99 0.002 240);
+  --chart-1: oklch(0.55 0.15 250);
+  --chart-2: oklch(0.6 0.15 180);
+  --chart-3: oklch(0.65 0.12 145);
+  --chart-4: oklch(0.7 0.15 75);
+  --chart-5: oklch(0.55 0.18 25);
+  --success: oklch(0.55 0.15 145);
+  --success-foreground: oklch(0.99 0.002 240);
+  --warning: oklch(0.75 0.15 75);
+  --warning-foreground: oklch(0.2 0.02 75);
   --radius: 0.65rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.235 0.015 65);
@@ -111,6 +115,83 @@
   --sidebar-accent-foreground:  oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.488 0.243 264.376);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: oklch(0.96 0.01 250);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.8 0.02 250);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.7 0.02 250);
+}
+
+/* Table styles */
+.data-table {
+  @apply w-full text-sm;
+}
+
+.data-table th {
+  @apply bg-muted/50 px-4 py-3 text-left font-medium text-muted-foreground;
+}
+
+.data-table td {
+  @apply border-b border-border px-4 py-3;
+}
+
+.data-table tr:hover td {
+  @apply bg-muted/30;
+}
+
+/* Status badges */
+.status-badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.status-badge-success {
+  background: oklch(0.55 0.15 145 / 0.1);
+  color: oklch(0.45 0.15 145);
+}
+
+.status-badge-warning {
+  background: oklch(0.75 0.15 75 / 0.1);
+  color: oklch(0.5 0.15 75);
+}
+
+.status-badge-error {
+  background: oklch(0.55 0.2 25 / 0.1);
+  color: oklch(0.55 0.2 25);
+}
+
+.status-badge-info {
+  background: oklch(0.45 0.15 250 / 0.1);
+  color: oklch(0.45 0.15 250);
+}
+
+/* Card hover effect */
+.card-hover {
+  @apply transition-all duration-200;
+}
+
+.card-hover:hover {
+  box-shadow: 0 10px 25px -5px oklch(0 0 0 / 0.1), 0 8px 10px -6px oklch(0 0 0 / 0.1);
+  border-color: oklch(0.45 0.15 250 / 0.2);
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent;
 }
 
 @layer base {
