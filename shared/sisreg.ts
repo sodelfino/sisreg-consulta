@@ -105,6 +105,7 @@ export const DEFAULT_FIELDS_MARCACAO = {
 };
 
 // Default fields to return for each query type - SOLICITAÇÃO
+// Nota: descricao_interna_procedimento e descricao_sigtap_procedimento NÃO existem neste índice
 export const DEFAULT_FIELDS_SOLICITACAO = {
   common: [
     "codigo_solicitacao",
@@ -115,8 +116,6 @@ export const DEFAULT_FIELDS_SOLICITACAO = {
     "municipio_paciente_residencia",
     "telefone",
     "codigo_interno_procedimento",
-    "descricao_interna_procedimento",
-    "descricao_sigtap_procedimento",
     "nome_grupo_procedimento",
     "codigo_classificacao_risco",
     "status_solicitacao",

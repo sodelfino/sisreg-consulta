@@ -289,14 +289,17 @@ export default function Consulta() {
                        mode === "atendidas" ? defaultFields.atendidas :
                        defaultFields.novas;
     
+    // Colunas de procedimento dependem do tipo de índice
+    const procedimentoCols = indexType === "marcacao" 
+      ? ["descricao_interna_procedimento", "descricao_sigtap_procedimento", "nome_grupo_procedimento"]
+      : ["nome_grupo_procedimento", "codigo_interno_procedimento"];
+    
     return [
       "codigo_solicitacao",
       "no_usuario",
       "telefone",
       estabelecimentoField,
-      "descricao_interna_procedimento",
-      "descricao_sigtap_procedimento",
-      "nome_grupo_procedimento",
+      ...procedimentoCols,
       "codigo_classificacao_risco",
       "status_solicitacao",
       ...modeFields.slice(0, 2),

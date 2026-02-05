@@ -61,3 +61,9 @@
 
 - [x] Corrigir busca de descrição de procedimento em Solicitações Ambulatoriais
 - [x] Corrigir filtros do Dashboard que retornam mesmo resultado
+
+
+## Correções v1.3.2
+
+- [x] Corrigir campos de descrição de procedimento em Solicitações Ambulatoriais (retornando vazio)
+- [x] Verificar e ajustar campos corretos da API para solicitações vs marcações

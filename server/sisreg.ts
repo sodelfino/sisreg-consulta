@@ -73,16 +73,24 @@ function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknow
     // Add procedimento search filter (wildcard search)
     if (procedimentoSearch && procedimentoSearch.trim()) {
       const searchTerm = procedimentoSearch.trim().toLowerCase();
+      const shouldClauses: Array<Record<string, unknown>> = [
+        { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
+        { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
+      ];
+      
+      // Only add descricao fields for marcacao index
+      if (indexType === "marcacao") {
+        shouldClauses.push(
+          { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
+          { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
+          { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
+          { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } }
+        );
+      }
+      
       quickMustClauses.push({
         bool: {
-          should: [
-            { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
-            { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
-            { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
-            { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
-            { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
-            { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
-          ],
+          should: shouldClauses,
           minimum_should_match: 1,
         },
       });
@@ -143,16 +151,24 @@ function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknow
   // Add procedimento search filter (wildcard search for partial matching)
   if (procedimentoSearch && procedimentoSearch.trim()) {
     const searchTerm = procedimentoSearch.trim().toLowerCase();
+    const shouldClauses: Array<Record<string, unknown>> = [
+      { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
+      { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
+    ];
+    
+    // Only add descricao fields for marcacao index
+    if (indexType === "marcacao") {
+      shouldClauses.push(
+        { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
+        { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
+        { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
+        { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } }
+      );
+    }
+    
     mustClauses.push({
       bool: {
-        should: [
-          { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
-          { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
-          { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
-          { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
-          { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
-        ],
+        should: shouldClauses,
         minimum_should_match: 1,
       },
     });
