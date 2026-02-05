@@ -23,9 +23,11 @@ import {
   Download,
   Filter,
   Loader2,
+  Phone,
   Search,
   Settings,
   Sparkles,
+  Stethoscope,
   X,
   Zap,
 } from "lucide-react";
@@ -61,6 +63,7 @@ export default function Consulta() {
   const [dateEnd, setDateEnd] = useState("");
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
+  const [procedimentoSearch, setProcedimentoSearch] = useState("");
 
   // Results state
   const [results, setResults] = useState<SearchResult | null>(null);
@@ -136,6 +139,7 @@ export default function Consulta() {
         dateStart: dateStart || undefined,
         dateEnd: dateEnd || undefined,
         selectedFields: selectedFields.length > 0 ? selectedFields : undefined,
+        procedimentoSearch: procedimentoSearch.trim() || undefined,
       });
     } finally {
       setIsSearching(false);
@@ -152,6 +156,7 @@ export default function Consulta() {
       dateStart: dateStart || undefined,
       dateEnd: dateEnd || undefined,
       selectedFields: selectedFields.length > 0 ? selectedFields : undefined,
+      procedimentoSearch: procedimentoSearch.trim() || undefined,
     });
   };
 
@@ -240,16 +245,30 @@ export default function Consulta() {
     }
   };
 
-  // Get display columns
+  // Get display columns - sempre incluir telefone
   const displayColumns = useMemo(() => {
     if (selectedFields.length > 0) {
+      // Se usuário selecionou campos, garantir que telefone esteja incluso
+      if (!selectedFields.includes("telefone")) {
+        return [...selectedFields, "telefone"];
+      }
       return selectedFields;
     }
+    // Colunas padrão: paciente, procedimento, telefone e campos do modo
     const modeFields = mode === "novas" ? DEFAULT_FIELDS.novas :
                        mode === "agendadas" ? DEFAULT_FIELDS.agendadas :
                        mode === "atendidas" ? DEFAULT_FIELDS.atendidas :
                        DEFAULT_FIELDS.novas;
-    return [...DEFAULT_FIELDS.common.slice(0, 6), ...modeFields.slice(0, 4)];
+    // Incluir: codigo, nome, telefone, procedimento, risco, status + campos do modo
+    return [
+      "codigo_solicitacao",
+      "no_usuario",
+      "telefone",
+      "descricao_interna_procedimento",
+      "codigo_classificacao_risco",
+      "status_solicitacao",
+      ...modeFields.slice(0, 3),
+    ];
   }, [selectedFields, mode]);
 
   // Format cell value
@@ -440,6 +459,22 @@ export default function Consulta() {
                     </div>
                   </div>
                 )}
+
+                {/* Procedimento Search */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4" />
+                    Buscar Procedimento
+                  </Label>
+                  <Input
+                    placeholder="Digite parte do nome ou descrição..."
+                    value={procedimentoSearch}
+                    onChange={(e) => setProcedimentoSearch(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Busca parcial por descrição ou nome do procedimento
+                  </p>
+                </div>
 
                 {/* Size */}
                 <div className="space-y-2">

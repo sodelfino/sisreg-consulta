@@ -30,3 +30,9 @@
 - [x] Botão de exportação CSV
 - [x] Área de insights gerados por LLM
 - [x] Estados de loading, erro e vazio
+
+## Melhorias Solicitadas
+
+- [x] Filtro de busca por procedimento (descrição/nome) com autocomplete parcial
+- [x] Garantir telefone de contato visível na tabela de resultados
+- [x] Incluir telefone na exportação CSV

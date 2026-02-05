@@ -12,6 +12,7 @@ export interface SisregQueryInput {
   dateEnd?: string;
   codigoCentralReguladora?: string[];
   selectedFields?: string[];
+  procedimentoSearch?: string; // Busca parcial por descrição/nome do procedimento
 }
 
 export interface SisregQueryResult {

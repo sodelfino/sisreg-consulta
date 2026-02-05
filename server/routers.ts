@@ -92,6 +92,7 @@ export const appRouter = router({
         dateEnd: z.string().optional(),
         codigoCentralReguladora: z.array(z.string()).optional(),
         selectedFields: z.array(z.string()).optional(),
+        procedimentoSearch: z.string().optional(), // Busca parcial por procedimento
       }))
       .mutation(async ({ ctx, input }) => {
         const config = await getSisregConfig(ctx.user.id);

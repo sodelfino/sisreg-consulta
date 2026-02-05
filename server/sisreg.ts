@@ -23,7 +23,7 @@ interface SisregCredentials {
  * Build Elasticsearch query based on mode and parameters
  */
 function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknown> {
-  const { mode, size, from = 0, dateStart, dateEnd, codigoCentralReguladora, selectedFields } = input;
+  const { mode, size, from = 0, dateStart, dateEnd, codigoCentralReguladora, selectedFields, procedimentoSearch } = input;
 
   // Determine which fields to return
   const modeFields = mode === "novas" ? DEFAULT_FIELDS.novas :
@@ -46,14 +46,34 @@ function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknow
   if (mode === "quick") {
     query.sort = [{ data_solicitacao: { order: "desc" } }];
     
+    const quickMustClauses: Record<string, unknown>[] = [];
+    
     // Add optional filter by central reguladora
     if (codigoCentralReguladora && codigoCentralReguladora.length > 0) {
+      quickMustClauses.push({ terms: { codigo_central_reguladora: codigoCentralReguladora } });
+    }
+    
+    // Add procedimento search filter (wildcard search)
+    if (procedimentoSearch && procedimentoSearch.trim()) {
+      const searchTerm = procedimentoSearch.trim().toLowerCase();
+      quickMustClauses.push({
+        bool: {
+          should: [
+            { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
+            { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
+            { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
+            { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
+          ],
+          minimum_should_match: 1,
+        },
+      });
+    }
+    
+    if (quickMustClauses.length > 0) {
       query.query = {
         bool: {
-          must: [
-            { terms: { codigo_central_reguladora: codigoCentralReguladora } }
-          ]
-        }
+          must: quickMustClauses,
+        },
       };
     }
     
@@ -98,6 +118,22 @@ function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknow
   if (codigoCentralReguladora && codigoCentralReguladora.length > 0) {
     mustClauses.push({
       terms: { codigo_central_reguladora: codigoCentralReguladora },
+    });
+  }
+
+  // Add procedimento search filter (wildcard search for partial matching)
+  if (procedimentoSearch && procedimentoSearch.trim()) {
+    const searchTerm = procedimentoSearch.trim().toLowerCase();
+    mustClauses.push({
+      bool: {
+        should: [
+          { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
+          { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
+          { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
+          { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
+        ],
+        minimum_should_match: 1,
+      },
     });
   }
 
