@@ -2,9 +2,13 @@
  * SISREG Elasticsearch API Types and Constants
  */
 
+// Tipo de índice: marcação ou solicitação ambulatorial
+export type IndexType = "marcacao" | "solicitacao";
+
 export type QueryMode = "quick" | "novas" | "agendadas" | "atendidas";
 
 export interface SisregQueryInput {
+  indexType: IndexType; // Novo: tipo de índice
   mode: QueryMode;
   size: number;
   from?: number;
@@ -24,6 +28,18 @@ export interface SisregQueryResult {
   errorMessage?: string;
 }
 
+// Índices disponíveis
+export const INDEX_PATHS = {
+  marcacao: "/marcacao-ambulatorial-rj-macae/_search",
+  solicitacao: "/solicitacao-ambulatorial-rj-macae/_search",
+};
+
+// Labels para os tipos de índice
+export const INDEX_LABELS = {
+  marcacao: "Marcações Ambulatoriais",
+  solicitacao: "Solicitações Ambulatoriais",
+};
+
 // Status values for "agendadas" query
 export const STATUS_AGENDADAS = [
   "SOLICITAÇÃO / AGENDADA / FILA DE ESPERA",
@@ -38,8 +54,8 @@ export const STATUS_ATENDIDAS = [
   "AGENDAMENTO / CONFIRMADO / EXECUTANTE",
 ];
 
-// Default fields to return for each query type
-export const DEFAULT_FIELDS = {
+// Default fields to return for each query type - MARCAÇÃO
+export const DEFAULT_FIELDS_MARCACAO = {
   common: [
     "codigo_solicitacao",
     "no_usuario",
@@ -54,6 +70,7 @@ export const DEFAULT_FIELDS = {
     "codigo_classificacao_risco",
     "status_solicitacao",
     "sigla_situacao",
+    "nome_unidade_executante", // Estabelecimento
   ],
   novas: [
     "data_solicitacao",
@@ -86,7 +103,59 @@ export const DEFAULT_FIELDS = {
   ],
 };
 
-// All available fields for marcação ambulatorial
+// Default fields to return for each query type - SOLICITAÇÃO
+export const DEFAULT_FIELDS_SOLICITACAO = {
+  common: [
+    "codigo_solicitacao",
+    "no_usuario",
+    "cns_usuario",
+    "sexo_usuario",
+    "dt_nascimento_usuario",
+    "municipio_paciente_residencia",
+    "telefone",
+    "codigo_interno_procedimento",
+    "descricao_interna_procedimento",
+    "nome_grupo_procedimento",
+    "codigo_classificacao_risco",
+    "status_solicitacao",
+    "sigla_situacao",
+    "nome_unidade_solicitante", // Estabelecimento solicitante
+  ],
+  novas: [
+    "data_solicitacao",
+    "codigo_central_reguladora",
+    "nome_central_reguladora",
+    "codigo_unidade_solicitante",
+    "nome_unidade_solicitante",
+    "nome_medico_solicitante",
+  ],
+  agendadas: [
+    "data_solicitacao",
+    "data_aprovacao",
+    "data_marcacao",
+    "codigo_central_reguladora",
+    "nome_central_reguladora",
+    "codigo_unidade_executante",
+    "nome_unidade_executante",
+    "nome_profissional_executante",
+  ],
+  atendidas: [
+    "data_solicitacao",
+    "data_aprovacao",
+    "data_confirmacao",
+    "data_marcacao",
+    "codigo_central_reguladora",
+    "nome_central_reguladora",
+    "codigo_unidade_executante",
+    "nome_unidade_executante",
+    "nome_profissional_executante",
+  ],
+};
+
+// Alias para compatibilidade
+export const DEFAULT_FIELDS = DEFAULT_FIELDS_MARCACAO;
+
+// All available fields for marcação/solicitação ambulatorial
 export const ALL_AVAILABLE_FIELDS = [
   { key: "codigo_solicitacao", label: "Código Solicitação", category: "identificacao" },
   { key: "no_usuario", label: "Nome Paciente", category: "paciente" },

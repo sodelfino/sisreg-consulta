@@ -26,7 +26,6 @@ export const sisregConfig = mysqlTable("sisreg_config", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
   baseUrl: varchar("baseUrl", { length: 512 }).notNull().default("https://sisreg-es.saude.gov.br"),
-  indexPath: varchar("indexPath", { length: 256 }).notNull().default("/marcacao-ambulatorial-rj-macae/_search"),
   username: varchar("username", { length: 256 }).notNull(),
   encryptedPassword: text("encryptedPassword").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -42,6 +41,7 @@ export type InsertSisregConfig = typeof sisregConfig.$inferInsert;
 export const queryLogs = mysqlTable("query_logs", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
+  indexType: varchar("indexType", { length: 32 }).notNull().default("marcacao"),
   queryMode: varchar("queryMode", { length: 32 }).notNull(),
   dateStart: varchar("dateStart", { length: 32 }),
   dateEnd: varchar("dateEnd", { length: 32 }),

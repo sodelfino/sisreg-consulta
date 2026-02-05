@@ -15,6 +15,13 @@
       "when": 1770248617396,
       "tag": "0001_pale_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1770252718332,
+      "tag": "0002_soft_maddog",
+      "breakpoints": true
     }
   ]
 }

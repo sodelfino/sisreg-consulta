@@ -16,9 +16,10 @@ import {
   deleteFieldSelection,
 } from "./db";
 import { executeSisregSearch, testSisregConnection } from "./sisreg";
-import { QueryMode } from "../shared/sisreg";
+import { IndexType, QueryMode } from "../shared/sisreg";
 import { invokeLLM } from "./_core/llm";
 
+const indexTypeSchema = z.enum(["marcacao", "solicitacao"]);
 const queryModeSchema = z.enum(["quick", "novas", "agendadas", "atendidas"]);
 
 export const appRouter = router({
@@ -42,7 +43,6 @@ export const appRouter = router({
       // Return config without password
       return {
         baseUrl: config.baseUrl,
-        indexPath: config.indexPath,
         username: config.username,
         hasPassword: true,
       };
@@ -51,7 +51,6 @@ export const appRouter = router({
     save: protectedProcedure
       .input(z.object({
         baseUrl: z.string().url(),
-        indexPath: z.string().min(1),
         username: z.string().min(1),
         password: z.string().min(1),
       }))
@@ -65,26 +64,33 @@ export const appRouter = router({
       return { success: true };
     }),
 
-    test: protectedProcedure.mutation(async ({ ctx }) => {
-      const config = await getSisregConfig(ctx.user.id);
-      if (!config) {
-        return { ok: false, message: "Configuração não encontrada. Configure suas credenciais primeiro." };
-      }
+    test: protectedProcedure
+      .input(z.object({
+        indexType: indexTypeSchema.default("marcacao"),
+      }).optional())
+      .mutation(async ({ ctx, input }) => {
+        const config = await getSisregConfig(ctx.user.id);
+        if (!config) {
+          return { ok: false, message: "Configuração não encontrada. Configure suas credenciais primeiro." };
+        }
 
-      const password = decryptPassword(config.encryptedPassword);
-      return testSisregConnection({
-        baseUrl: config.baseUrl,
-        indexPath: config.indexPath,
-        username: config.username,
-        password,
-      });
-    }),
+        const password = decryptPassword(config.encryptedPassword);
+        return testSisregConnection(
+          {
+            baseUrl: config.baseUrl,
+            username: config.username,
+            password,
+          },
+          input?.indexType || "marcacao"
+        );
+      }),
   }),
 
   // SISREG Search
   search: router({
     execute: protectedProcedure
       .input(z.object({
+        indexType: indexTypeSchema.default("marcacao"),
         mode: queryModeSchema,
         size: z.number().min(1).max(1000).default(100),
         from: z.number().min(0).default(0),
@@ -92,7 +98,7 @@ export const appRouter = router({
         dateEnd: z.string().optional(),
         codigoCentralReguladora: z.array(z.string()).optional(),
         selectedFields: z.array(z.string()).optional(),
-        procedimentoSearch: z.string().optional(), // Busca parcial por procedimento
+        procedimentoSearch: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const config = await getSisregConfig(ctx.user.id);
@@ -111,7 +117,6 @@ export const appRouter = router({
         const result = await executeSisregSearch(
           {
             baseUrl: config.baseUrl,
-            indexPath: config.indexPath,
             username: config.username,
             password,
           },
@@ -122,6 +127,7 @@ export const appRouter = router({
         await createQueryLog({
           userId: ctx.user.id,
           queryMode: input.mode,
+          indexType: input.indexType,
           dateStart: input.dateStart || null,
           dateEnd: input.dateEnd || null,
           size: input.size,
@@ -195,6 +201,7 @@ export const appRouter = router({
       .input(z.object({
         data: z.array(z.record(z.string(), z.unknown())),
         queryMode: queryModeSchema,
+        indexType: indexTypeSchema.default("marcacao"),
         dateStart: z.string().optional(),
         dateEnd: z.string().optional(),
       }))
@@ -236,9 +243,11 @@ export const appRouter = router({
           riskCounts[risk] = (riskCounts[risk] || 0) + 1;
         }
 
+        const indexLabel = input.indexType === "solicitacao" ? "solicitação ambulatorial" : "marcação ambulatorial";
+
         // Build context for LLM
         const context = `
-Análise de dados de marcação ambulatorial do SISREG (Sistema de Regulação).
+Análise de dados de ${indexLabel} do SISREG (Sistema de Regulação).
 Tipo de consulta: ${input.queryMode}
 Período: ${input.dateStart || "N/A"} a ${input.dateEnd || "N/A"}
 Total de registros: ${total}
@@ -262,7 +271,7 @@ ${Object.entries(riskCounts).map(([k, v]) => `- Risco ${k}: ${v} (${((v/total)*1
               {
                 role: "system",
                 content: `Você é um especialista em regulação de saúde pública e análise de dados do SISREG (Sistema Nacional de Regulação).
-Sua tarefa é analisar dados de marcação ambulatorial e fornecer insights úteis para gestores de saúde.
+Sua tarefa é analisar dados de ${indexLabel} e fornecer insights úteis para gestores de saúde.
 Responda sempre em português brasileiro, de forma clara e objetiva.
 Foque em:
 1. Padrões identificados nos dados
@@ -273,7 +282,7 @@ Seja conciso mas informativo. Use formatação markdown para melhor legibilidade
               },
               {
                 role: "user",
-                content: `Analise os seguintes dados de marcação ambulatorial e forneça insights relevantes:\n\n${context}`,
+                content: `Analise os seguintes dados de ${indexLabel} e forneça insights relevantes:\n\n${context}`,
               },
             ],
           });

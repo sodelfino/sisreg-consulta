@@ -9,16 +9,21 @@ import {
   Clock, 
   Database, 
   FileSpreadsheet, 
+  FileText,
   LogIn, 
   Search,
   Settings,
   Sparkles,
-  TrendingUp
+  TrendingUp,
+  ArrowRight,
+  Building2,
+  Phone,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 export default function Home() {
   const { user, loading, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
 
   if (loading) {
     return (
@@ -52,10 +57,10 @@ export default function Home() {
                 <span className="text-sm text-muted-foreground hidden sm:block">
                   Olá, {user?.name || "Usuário"}
                 </span>
-                <Link href="/consulta">
-                  <Button>
-                    <Search className="mr-2 h-4 w-4" />
-                    Consultar
+                <Link href="/configuracao">
+                  <Button variant="outline" size="sm">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Configurações
                   </Button>
                 </Link>
               </>
@@ -72,46 +77,101 @@ export default function Home() {
       </header>
 
       {/* Hero Section */}
-      <section className="py-20 px-4">
+      <section className="py-16 px-4">
         <div className="container">
-          <div className="max-w-3xl mx-auto text-center">
+          <div className="max-w-3xl mx-auto text-center mb-12">
             <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm text-primary mb-6">
               <Sparkles className="h-4 w-4" />
               Sistema de Consulta SISREG
             </div>
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-6">
-              Consulte dados de{" "}
-              <span className="gradient-text">Marcação Ambulatorial</span>
+              Consulte dados do{" "}
+              <span className="gradient-text">SISREG</span>
             </h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Acesse, analise e exporte dados do SISREG de forma simples e segura. 
-              Consulte solicitações novas, agendadas e atendidas com filtros avançados.
+              Acesse, analise e exporte dados de marcações e solicitações ambulatoriais de forma simples e segura.
             </p>
-            
-            {isAuthenticated ? (
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/consulta">
-                  <Button size="lg" className="w-full sm:w-auto">
-                    <Search className="mr-2 h-5 w-5" />
-                    Iniciar Consulta
-                  </Button>
-                </Link>
-                <Link href="/configuracao">
-                  <Button size="lg" variant="outline" className="w-full sm:w-auto">
-                    <Settings className="mr-2 h-5 w-5" />
-                    Configurações
-                  </Button>
-                </Link>
-              </div>
-            ) : (
+          </div>
+
+          {/* Main Selection Cards */}
+          {isAuthenticated ? (
+            <div className="grid gap-6 md:grid-cols-2 max-w-4xl mx-auto">
+              {/* Marcações Card */}
+              <Card className="card-hover cursor-pointer group relative overflow-hidden" onClick={() => setLocation("/consulta?tipo=marcacao")}>
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent" />
+                <CardHeader className="relative">
+                  <div className="h-16 w-16 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <Calendar className="h-8 w-8 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl flex items-center gap-2">
+                    Marcações Ambulatoriais
+                    <ArrowRight className="h-5 w-5 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                  </CardTitle>
+                  <CardDescription className="text-base">
+                    Consulte procedimentos ambulatoriais já agendados
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="relative">
+                  <div className="flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full">
+                      <Building2 className="h-3 w-3" />
+                      Estabelecimento executante
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full">
+                      <Phone className="h-3 w-3" />
+                      Telefone do paciente
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full">
+                      <Calendar className="h-3 w-3" />
+                      Data de marcação
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Solicitações Card */}
+              <Card className="card-hover cursor-pointer group relative overflow-hidden" onClick={() => setLocation("/consulta?tipo=solicitacao")}>
+                <div className="absolute inset-0 bg-gradient-to-br from-chart-2/5 to-transparent" />
+                <CardHeader className="relative">
+                  <div className="h-16 w-16 rounded-xl bg-chart-2/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <FileText className="h-8 w-8 text-chart-2" />
+                  </div>
+                  <CardTitle className="text-xl flex items-center gap-2">
+                    Solicitações Ambulatoriais
+                    <ArrowRight className="h-5 w-5 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                  </CardTitle>
+                  <CardDescription className="text-base">
+                    Consulte solicitações em fila de espera
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="relative">
+                  <div className="flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full">
+                      <Building2 className="h-3 w-3" />
+                      Unidade solicitante
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full">
+                      <Phone className="h-3 w-3" />
+                      Telefone do paciente
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full">
+                      <Clock className="h-3 w-3" />
+                      Data de solicitação
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="text-center">
               <a href={getLoginUrl()}>
                 <Button size="lg">
                   <LogIn className="mr-2 h-5 w-5" />
                   Fazer Login para Começar
                 </Button>
               </a>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -169,7 +229,7 @@ export default function Home() {
                 </div>
                 <CardTitle className="text-lg">Exportação CSV</CardTitle>
                 <CardDescription>
-                  Exporte os resultados para análise em planilhas
+                  Exporte os resultados para análise em planilhas Excel
                 </CardDescription>
               </CardHeader>
             </Card>

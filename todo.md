@@ -36,3 +36,11 @@
 - [x] Filtro de busca por procedimento (descrição/nome) com autocomplete parcial
 - [x] Garantir telefone de contato visível na tabela de resultados
 - [x] Incluir telefone na exportação CSV
+
+
+## Versão 1.2 - Solicitação Ambulatorial
+
+- [x] Adicionar coluna nome do estabelecimento na tabela de marcações
+- [x] Integrar endpoint de Solicitação Ambulatorial (solicitacao-ambulatorial-rj-macae)
+- [x] Criar tela de seleção inicial entre Solicitações e Marcações
+- [x] Adaptar filtros e campos para cada tipo de consulta

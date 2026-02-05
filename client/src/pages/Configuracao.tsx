@@ -31,7 +31,6 @@ export default function Configuracao() {
 
   // Form state
   const [baseUrl, setBaseUrl] = useState("https://sisreg-es.saude.gov.br");
-  const [indexPath, setIndexPath] = useState("/marcacao-ambulatorial-rj-macae/_search");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -48,7 +47,6 @@ export default function Configuracao() {
   useEffect(() => {
     if (configQuery.data) {
       setBaseUrl(configQuery.data.baseUrl);
-      setIndexPath(configQuery.data.indexPath);
       setUsername(configQuery.data.username);
     }
   }, [configQuery.data]);
@@ -105,9 +103,6 @@ export default function Configuracao() {
       return;
     }
 
-    // If password is empty but config exists, use placeholder to indicate no change
-    const passwordToSave = password.trim() || "UNCHANGED_PASSWORD_PLACEHOLDER";
-    
     if (!password.trim() && configQuery.data?.hasPassword) {
       toast.error("Para atualizar, informe a senha novamente");
       return;
@@ -115,7 +110,6 @@ export default function Configuracao() {
 
     saveMutation.mutate({
       baseUrl: baseUrl.trim(),
-      indexPath: indexPath.trim(),
       username: username.trim(),
       password: password.trim(),
     });
@@ -202,10 +196,10 @@ export default function Configuracao() {
 
       <main className="container py-6 max-w-2xl">
         {/* Back link */}
-        <Link href="/consulta">
+        <Link href="/">
           <Button variant="ghost" size="sm" className="mb-6">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar para Consulta
+            Voltar
           </Button>
         </Link>
 
@@ -256,19 +250,6 @@ export default function Configuracao() {
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="indexPath">Caminho do Índice</Label>
-                  <Input
-                    id="indexPath"
-                    value={indexPath}
-                    onChange={(e) => setIndexPath(e.target.value)}
-                    placeholder="/marcacao-ambulatorial-rj-macae/_search"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Caminho do índice Elasticsearch (endpoint de busca)
-                  </p>
-                </div>
-
                 <Separator />
 
                 <div className="space-y-2">
@@ -313,7 +294,7 @@ export default function Configuracao() {
                 </div>
               </div>
 
-              {/* Actions */}
+              {/* Action Buttons */}
               <div className="flex flex-wrap gap-2">
                 <Button
                   onClick={handleSave}
@@ -355,31 +336,6 @@ export default function Configuracao() {
                   </Button>
                 )}
               </div>
-
-              {/* Test Result */}
-              {testResult && (
-                <div
-                  className={`flex items-start gap-3 p-4 rounded-lg ${
-                    testResult.ok
-                      ? "bg-green-50 border border-green-200"
-                      : "bg-red-50 border border-red-200"
-                  }`}
-                >
-                  {testResult.ok ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
-                  )}
-                  <div>
-                    <p className={`font-medium ${testResult.ok ? "text-green-800" : "text-red-800"}`}>
-                      {testResult.ok ? "Conexão bem sucedida" : "Falha na conexão"}
-                    </p>
-                    <p className={`text-sm ${testResult.ok ? "text-green-700" : "text-red-700"}`}>
-                      {testResult.message}
-                    </p>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -387,36 +343,72 @@ export default function Configuracao() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-chart-3/10 flex items-center justify-center">
-                  <Shield className="h-5 w-5 text-chart-3" />
+                <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                  <Shield className="h-5 w-5 text-green-500" />
                 </div>
                 <div>
                   <CardTitle className="text-base">Segurança</CardTitle>
                   <CardDescription>
-                    Como suas credenciais são protegidas
+                    Suas credenciais são protegidas
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-3 text-sm text-muted-foreground">
+              <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-start gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-chart-3 mt-0.5 shrink-0" />
-                  <span>Senhas são criptografadas antes de serem armazenadas</span>
+                  <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                  <span>Senhas são criptografadas com AES-256 antes do armazenamento</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-chart-3 mt-0.5 shrink-0" />
-                  <span>Credenciais nunca são expostas no frontend ou em logs</span>
+                  <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                  <span>Credenciais nunca são expostas no frontend ou logs</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-chart-3 mt-0.5 shrink-0" />
-                  <span>Comunicação com SISREG usa autenticação HTTP Basic sobre HTTPS</span>
+                  <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                  <span>Comunicação via HTTPS com a API do SISREG</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-chart-3 mt-0.5 shrink-0" />
-                  <span>Acesso somente leitura - nenhuma alteração é feita no SISREG</span>
+                  <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                  <span>Cada usuário tem suas próprias credenciais isoladas</span>
                 </li>
               </ul>
+            </CardContent>
+          </Card>
+
+          {/* Help Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <AlertCircle className="h-5 w-5 text-amber-500" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Ajuda</CardTitle>
+                  <CardDescription>
+                    Informações sobre a configuração
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  <strong className="text-foreground">URL Base:</strong> Normalmente é{" "}
+                  <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                    https://sisreg-es.saude.gov.br
+                  </code>
+                </p>
+                <p>
+                  <strong className="text-foreground">Usuário e Senha:</strong> São as mesmas
+                  credenciais que você usa para acessar o SISREG. Consulte a equipe de TI
+                  do seu município se não tiver acesso.
+                </p>
+                <p>
+                  <strong className="text-foreground">Índices disponíveis:</strong> O sistema
+                  permite consultar marcações e solicitações ambulatoriais de Macaé/RJ.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>

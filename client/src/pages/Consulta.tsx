@@ -30,16 +30,21 @@ import {
   Stethoscope,
   X,
   Zap,
+  FileText,
+  Building2,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { getLoginUrl } from "@/const";
 import { 
   ALL_AVAILABLE_FIELDS, 
   FIELD_CATEGORIES, 
-  DEFAULT_FIELDS,
+  DEFAULT_FIELDS_MARCACAO,
+  DEFAULT_FIELDS_SOLICITACAO,
   RISK_LABELS,
   SITUACAO_LABELS,
-  type QueryMode 
+  INDEX_LABELS,
+  type QueryMode,
+  type IndexType,
 } from "../../../shared/sisreg";
 
 type SearchResult = {
@@ -54,6 +59,9 @@ type SearchResult = {
 export default function Consulta() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Index type state
+  const [indexType, setIndexType] = useState<IndexType>("marcacao");
 
   // Query state
   const [mode, setMode] = useState<QueryMode>("quick");
@@ -109,6 +117,15 @@ export default function Consulta() {
     },
   });
 
+  // Handle index type change
+  const handleIndexTypeChange = (newType: IndexType) => {
+    setIndexType(newType);
+    setResults(null);
+    setInsights("");
+    setFrom(0);
+    setSelectedFields([]);
+  };
+
   // Handle search
   const handleSearch = async () => {
     if (!configQuery.data) {
@@ -133,6 +150,7 @@ export default function Consulta() {
     
     try {
       await searchMutation.mutateAsync({
+        indexType,
         mode,
         size,
         from,
@@ -150,6 +168,7 @@ export default function Consulta() {
   const handlePageChange = (newFrom: number) => {
     setFrom(newFrom);
     searchMutation.mutate({
+      indexType,
       mode,
       size,
       from: newFrom,
@@ -171,6 +190,7 @@ export default function Consulta() {
     insightsMutation.mutate({
       data: results.hits,
       queryMode: mode,
+      indexType,
       dateStart: dateStart || undefined,
       dateEnd: dateEnd || undefined,
     });
@@ -212,7 +232,7 @@ export default function Consulta() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `sisreg_${mode}_${new Date().toISOString().split("T")[0]}.csv`;
+    link.download = `sisreg_${indexType}_${mode}_${new Date().toISOString().split("T")[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -245,31 +265,41 @@ export default function Consulta() {
     }
   };
 
-  // Get display columns - sempre incluir telefone
+  // Get default fields based on index type
+  const getDefaultFields = () => {
+    return indexType === "solicitacao" ? DEFAULT_FIELDS_SOLICITACAO : DEFAULT_FIELDS_MARCACAO;
+  };
+
+  // Get display columns - sempre incluir telefone e estabelecimento
   const displayColumns = useMemo(() => {
+    const defaultFields = getDefaultFields();
+    const estabelecimentoField = indexType === "marcacao" ? "nome_unidade_executante" : "nome_unidade_solicitante";
+    
     if (selectedFields.length > 0) {
-      // Se usuário selecionou campos, garantir que telefone esteja incluso
-      if (!selectedFields.includes("telefone")) {
-        return [...selectedFields, "telefone"];
-      }
-      return selectedFields;
+      // Se usuário selecionou campos, garantir que telefone e estabelecimento estejam inclusos
+      const cols = [...selectedFields];
+      if (!cols.includes("telefone")) cols.push("telefone");
+      if (!cols.includes(estabelecimentoField)) cols.push(estabelecimentoField);
+      return cols;
     }
-    // Colunas padrão: paciente, procedimento, telefone e campos do modo
-    const modeFields = mode === "novas" ? DEFAULT_FIELDS.novas :
-                       mode === "agendadas" ? DEFAULT_FIELDS.agendadas :
-                       mode === "atendidas" ? DEFAULT_FIELDS.atendidas :
-                       DEFAULT_FIELDS.novas;
-    // Incluir: codigo, nome, telefone, procedimento, risco, status + campos do modo
+    
+    // Colunas padrão: paciente, procedimento, telefone, estabelecimento e campos do modo
+    const modeFields = mode === "novas" ? defaultFields.novas :
+                       mode === "agendadas" ? defaultFields.agendadas :
+                       mode === "atendidas" ? defaultFields.atendidas :
+                       defaultFields.novas;
+    
     return [
       "codigo_solicitacao",
       "no_usuario",
       "telefone",
+      estabelecimentoField,
       "descricao_interna_procedimento",
       "codigo_classificacao_risco",
       "status_solicitacao",
-      ...modeFields.slice(0, 3),
+      ...modeFields.slice(0, 2),
     ];
-  }, [selectedFields, mode]);
+  }, [selectedFields, mode, indexType]);
 
   // Format cell value
   const formatCellValue = (key: string, value: unknown): string => {
@@ -301,6 +331,10 @@ export default function Consulta() {
 
   // Get field label
   const getFieldLabel = (key: string): string => {
+    // Custom labels for estabelecimento
+    if (key === "nome_unidade_executante") return "Estabelecimento";
+    if (key === "nome_unidade_solicitante") return "Unidade Solicitante";
+    
     const field = ALL_AVAILABLE_FIELDS.find((f) => f.key === key);
     return field?.label || key;
   };
@@ -331,7 +365,7 @@ export default function Consulta() {
             </div>
             <CardTitle>Acesso Restrito</CardTitle>
             <CardDescription>
-              Faça login para acessar a consulta SISREG
+              Faça login para acessar as consultas
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -364,24 +398,25 @@ export default function Consulta() {
           </div>
           
           <div className="flex items-center gap-2">
-            <Link href="/configuracao">
-              <Button variant="ghost" size="icon">
-                <Settings className="h-5 w-5" />
-              </Button>
-            </Link>
             <span className="text-sm text-muted-foreground hidden sm:block">
               {user?.name}
             </span>
+            <Link href="/configuracao">
+              <Button variant="outline" size="sm">
+                <Settings className="mr-2 h-4 w-4" />
+                Configurações
+              </Button>
+            </Link>
           </div>
         </div>
       </header>
 
       <main className="container py-6">
-        {/* Config warning */}
-        {!configQuery.isLoading && !configQuery.data && (
-          <Card className="mb-6 border-warning bg-warning/5">
+        {/* Config Warning */}
+        {!configQuery.data && !configQuery.isLoading && (
+          <Card className="mb-6 border-amber-500/50 bg-amber-500/5">
             <CardContent className="flex items-center gap-4 py-4">
-              <AlertCircle className="h-5 w-5 text-warning" />
+              <AlertCircle className="h-5 w-5 text-amber-500" />
               <div className="flex-1">
                 <p className="font-medium">Configuração necessária</p>
                 <p className="text-sm text-muted-foreground">
@@ -389,115 +424,138 @@ export default function Consulta() {
                 </p>
               </div>
               <Link href="/configuracao">
-                <Button variant="outline" size="sm">
-                  Configurar
-                </Button>
+                <Button size="sm">Configurar</Button>
               </Link>
             </CardContent>
           </Card>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[350px_1fr]">
+        {/* Index Type Selector */}
+        <div className="mb-6">
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant={indexType === "marcacao" ? "default" : "outline"}
+              onClick={() => handleIndexTypeChange("marcacao")}
+              className="flex items-center gap-2"
+            >
+              <Calendar className="h-4 w-4" />
+              Marcações Ambulatoriais
+            </Button>
+            <Button
+              variant={indexType === "solicitacao" ? "default" : "outline"}
+              onClick={() => handleIndexTypeChange("solicitacao")}
+              className="flex items-center gap-2"
+            >
+              <FileText className="h-4 w-4" />
+              Solicitações Ambulatoriais
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            {indexType === "marcacao" 
+              ? "Consulte marcações de procedimentos ambulatoriais já agendados"
+              : "Consulte solicitações de procedimentos ambulatoriais em fila de espera"}
+          </p>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
           {/* Filters Panel */}
-          <div className="space-y-6">
+          <div className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Filter className="h-5 w-5" />
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Filter className="h-4 w-4" />
                   Filtros
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Query Mode */}
-                <div className="space-y-2">
-                  <Label>Tipo de Consulta</Label>
-                  <Tabs value={mode} onValueChange={(v) => setMode(v as QueryMode)}>
-                    <TabsList className="grid grid-cols-2 w-full">
-                      <TabsTrigger value="quick" className="text-xs">
-                        <Zap className="h-3 w-3 mr-1" />
-                        Rápida
-                      </TabsTrigger>
-                      <TabsTrigger value="novas" className="text-xs">
-                        <Clock className="h-3 w-3 mr-1" />
-                        Novas
-                      </TabsTrigger>
-                    </TabsList>
-                    <TabsList className="grid grid-cols-2 w-full mt-1">
-                      <TabsTrigger value="agendadas" className="text-xs">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        Agendadas
-                      </TabsTrigger>
-                      <TabsTrigger value="atendidas" className="text-xs">
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Atendidas
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </div>
+                <Tabs value={mode} onValueChange={(v) => setMode(v as QueryMode)}>
+                  <TabsList className="grid grid-cols-2 h-auto">
+                    <TabsTrigger value="quick" className="text-xs py-2">
+                      <Zap className="mr-1 h-3 w-3" />
+                      Rápida
+                    </TabsTrigger>
+                    <TabsTrigger value="novas" className="text-xs py-2">
+                      <Clock className="mr-1 h-3 w-3" />
+                      Novas
+                    </TabsTrigger>
+                    <TabsTrigger value="agendadas" className="text-xs py-2">
+                      <Calendar className="mr-1 h-3 w-3" />
+                      Agendadas
+                    </TabsTrigger>
+                    <TabsTrigger value="atendidas" className="text-xs py-2">
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                      Atendidas
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
 
                 {/* Date Range */}
                 {mode !== "quick" && (
-                  <div className="space-y-2">
-                    <Label>Período</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-xs text-muted-foreground">De</Label>
-                        <Input
-                          type="date"
-                          value={dateStart}
-                          onChange={(e) => setDateStart(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Até</Label>
-                        <Input
-                          type="date"
-                          value={dateEnd}
-                          onChange={(e) => setDateEnd(e.target.value)}
-                        />
-                      </div>
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="dateStart" className="text-xs">Data Inicial</Label>
+                      <Input
+                        id="dateStart"
+                        type="date"
+                        value={dateStart}
+                        onChange={(e) => setDateStart(e.target.value)}
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="dateEnd" className="text-xs">Data Final</Label>
+                      <Input
+                        id="dateEnd"
+                        type="date"
+                        value={dateEnd}
+                        onChange={(e) => setDateEnd(e.target.value)}
+                        className="h-9"
+                      />
                     </div>
                   </div>
                 )}
 
                 {/* Procedimento Search */}
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Stethoscope className="h-4 w-4" />
-                    Buscar Procedimento
-                  </Label>
-                  <Input
-                    placeholder="Digite parte do nome ou descrição..."
-                    value={procedimentoSearch}
-                    onChange={(e) => setProcedimentoSearch(e.target.value)}
-                  />
+                <div className="space-y-1">
+                  <Label htmlFor="procedimentoSearch" className="text-xs">Buscar Procedimento</Label>
+                  <div className="relative">
+                    <Stethoscope className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="procedimentoSearch"
+                      placeholder="Digite parte do nome..."
+                      value={procedimentoSearch}
+                      onChange={(e) => setProcedimentoSearch(e.target.value)}
+                      className="h-9 pl-9"
+                    />
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     Busca parcial por descrição ou nome do procedimento
                   </p>
                 </div>
 
                 {/* Size */}
-                <div className="space-y-2">
-                  <Label>Quantidade</Label>
+                <div className="space-y-1">
+                  <Label htmlFor="size" className="text-xs">Resultados por página</Label>
                   <Select value={String(size)} onValueChange={(v) => setSize(Number(v))}>
-                    <SelectTrigger>
+                    <SelectTrigger id="size" className="h-9">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="10">10 registros</SelectItem>
-                      <SelectItem value="50">50 registros</SelectItem>
-                      <SelectItem value="100">100 registros</SelectItem>
-                      <SelectItem value="250">250 registros</SelectItem>
-                      <SelectItem value="500">500 registros</SelectItem>
-                      <SelectItem value="1000">1000 registros</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="200">200</SelectItem>
+                      <SelectItem value="500">500</SelectItem>
+                      <SelectItem value="1000">1000</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {/* Field Selector Toggle */}
-                <div className="space-y-2">
+                <div className="pt-2">
                   <Button
                     variant="outline"
+                    size="sm"
                     className="w-full justify-between"
                     onClick={() => setShowFieldSelector(!showFieldSelector)}
                   >
@@ -612,6 +670,9 @@ export default function Consulta() {
                 <div className="flex items-center gap-4">
                   <Badge variant={results.ok ? "default" : "destructive"}>
                     {results.ok ? `${results.total} resultados` : "Erro"}
+                  </Badge>
+                  <Badge variant="outline">
+                    {INDEX_LABELS[indexType]}
                   </Badge>
                   {results.took && (
                     <span className="text-sm text-muted-foreground">
@@ -728,7 +789,7 @@ export default function Consulta() {
                   <Search className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-lg font-medium">Pronto para consultar</p>
                   <p className="text-sm text-muted-foreground">
-                    Configure os filtros e clique em Consultar
+                    Selecione o tipo de consulta, configure os filtros e clique em Consultar
                   </p>
                 </CardContent>
               </Card>

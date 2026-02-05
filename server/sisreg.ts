@@ -4,36 +4,53 @@
  */
 
 import {
-  QueryMode,
   SisregQueryInput,
   SisregQueryResult,
   STATUS_AGENDADAS,
   STATUS_ATENDIDAS,
-  DEFAULT_FIELDS,
+  DEFAULT_FIELDS_MARCACAO,
+  DEFAULT_FIELDS_SOLICITACAO,
+  INDEX_PATHS,
+  IndexType,
 } from "../shared/sisreg";
 
 interface SisregCredentials {
   baseUrl: string;
-  indexPath: string;
   username: string;
   password: string;
+}
+
+/**
+ * Get the index path based on index type
+ */
+function getIndexPath(indexType: IndexType): string {
+  return INDEX_PATHS[indexType];
+}
+
+/**
+ * Get default fields based on index type
+ */
+function getDefaultFields(indexType: IndexType) {
+  return indexType === "solicitacao" ? DEFAULT_FIELDS_SOLICITACAO : DEFAULT_FIELDS_MARCACAO;
 }
 
 /**
  * Build Elasticsearch query based on mode and parameters
  */
 function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknown> {
-  const { mode, size, from = 0, dateStart, dateEnd, codigoCentralReguladora, selectedFields, procedimentoSearch } = input;
+  const { indexType, mode, size, from = 0, dateStart, dateEnd, codigoCentralReguladora, selectedFields, procedimentoSearch } = input;
+
+  const defaultFields = getDefaultFields(indexType);
 
   // Determine which fields to return
-  const modeFields = mode === "novas" ? DEFAULT_FIELDS.novas :
-                     mode === "agendadas" ? DEFAULT_FIELDS.agendadas :
-                     mode === "atendidas" ? DEFAULT_FIELDS.atendidas :
-                     DEFAULT_FIELDS.novas;
+  const modeFields = mode === "novas" ? defaultFields.novas :
+                     mode === "agendadas" ? defaultFields.agendadas :
+                     mode === "atendidas" ? defaultFields.atendidas :
+                     defaultFields.novas;
   
   const fieldsToReturn = selectedFields && selectedFields.length > 0 
     ? selectedFields 
-    : [...DEFAULT_FIELDS.common, ...modeFields];
+    : [...defaultFields.common, ...modeFields];
 
   // Base query structure
   const query: Record<string, unknown> = {
@@ -162,7 +179,8 @@ export async function executeSisregSearch(
   credentials: SisregCredentials,
   input: SisregQueryInput
 ): Promise<SisregQueryResult> {
-  const { baseUrl, indexPath, username, password } = credentials;
+  const { baseUrl, username, password } = credentials;
+  const indexPath = getIndexPath(input.indexType);
   
   const url = `${baseUrl}${indexPath}`;
   const esQuery = buildElasticsearchQuery(input);
@@ -244,12 +262,14 @@ export async function executeSisregSearch(
 }
 
 /**
- * Test connection to SISREG API
+ * Test connection to SISREG API for a specific index type
  */
 export async function testSisregConnection(
-  credentials: SisregCredentials
+  credentials: SisregCredentials,
+  indexType: IndexType = "marcacao"
 ): Promise<{ ok: boolean; message: string }> {
   const result = await executeSisregSearch(credentials, {
+    indexType,
     mode: "quick",
     size: 1,
   });

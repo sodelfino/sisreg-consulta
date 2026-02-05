@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock the global fetch
 const mockFetch = vi.fn();
@@ -10,7 +10,6 @@ import { executeSisregSearch, testSisregConnection } from "./sisreg";
 describe("SISREG Elasticsearch Service", () => {
   const mockCredentials = {
     baseUrl: "https://sisreg-es.saude.gov.br",
-    indexPath: "/marcacao-ambulatorial-rj-macae/_search",
     username: "testuser",
     password: "testpass",
   };
@@ -39,6 +38,7 @@ describe("SISREG Elasticsearch Service", () => {
       });
 
       const result = await executeSisregSearch(mockCredentials, {
+        indexType: "marcacao",
         mode: "quick",
         size: 10,
       });
@@ -54,10 +54,11 @@ describe("SISREG Elasticsearch Service", () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
-        json: () => Promise.resolve({ error: "Unauthorized" }),
+        json: () => Promise.resolve({}),
       });
 
       const result = await executeSisregSearch(mockCredentials, {
+        indexType: "marcacao",
         mode: "quick",
         size: 10,
       });
@@ -71,10 +72,11 @@ describe("SISREG Elasticsearch Service", () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 403,
-        json: () => Promise.resolve({ error: "Forbidden" }),
+        json: () => Promise.resolve({}),
       });
 
       const result = await executeSisregSearch(mockCredentials, {
+        indexType: "marcacao",
         mode: "quick",
         size: 10,
       });
@@ -88,6 +90,7 @@ describe("SISREG Elasticsearch Service", () => {
       mockFetch.mockRejectedValueOnce(new Error("Network error"));
 
       const result = await executeSisregSearch(mockCredentials, {
+        indexType: "marcacao",
         mode: "quick",
         size: 10,
       });
@@ -108,6 +111,7 @@ describe("SISREG Elasticsearch Service", () => {
       });
 
       await executeSisregSearch(mockCredentials, {
+        indexType: "marcacao",
         mode: "novas",
         size: 100,
         dateStart: "2024-01-01",
@@ -134,6 +138,7 @@ describe("SISREG Elasticsearch Service", () => {
       });
 
       await executeSisregSearch(mockCredentials, {
+        indexType: "marcacao",
         mode: "quick",
         size: 10,
       });
@@ -153,24 +158,45 @@ describe("SISREG Elasticsearch Service", () => {
       });
 
       await executeSisregSearch(mockCredentials, {
+        indexType: "marcacao",
         mode: "quick",
-        size: 5000, // Request more than limit
+        size: 5000, // Try to request more than limit
       });
 
       const [, options] = mockFetch.mock.calls[0];
       const body = JSON.parse(options.body);
       expect(body.size).toBe(1000); // Should be capped at 1000
     });
+
+    it("should use correct index path for solicitacao type", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          took: 10,
+          hits: { total: { value: 0 }, hits: [] },
+        }),
+      });
+
+      await executeSisregSearch(mockCredentials, {
+        indexType: "solicitacao",
+        mode: "quick",
+        size: 10,
+      });
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toBe("https://sisreg-es.saude.gov.br/solicitacao-ambulatorial-rj-macae/_search");
+    });
   });
 
   describe("testSisregConnection", () => {
-    it("should return success for valid connection", async () => {
+    it("should return success on valid connection", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: () => Promise.resolve({
           took: 5,
-          hits: { total: { value: 1000 }, hits: [{ _source: {} }] },
+          hits: { total: { value: 1000 }, hits: [] },
         }),
       });
 
@@ -180,11 +206,11 @@ describe("SISREG Elasticsearch Service", () => {
       expect(result.message).toContain("Conexão bem sucedida");
     });
 
-    it("should return failure for invalid credentials", async () => {
+    it("should return failure on invalid credentials", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
-        json: () => Promise.resolve({ error: "Unauthorized" }),
+        json: () => Promise.resolve({}),
       });
 
       const result = await testSisregConnection(mockCredentials);

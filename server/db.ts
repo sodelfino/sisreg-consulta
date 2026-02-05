@@ -146,7 +146,7 @@ export async function getSisregConfig(userId: number) {
 
 export async function upsertSisregConfig(
   userId: number,
-  config: { baseUrl: string; indexPath: string; username: string; password: string }
+  config: { baseUrl: string; username: string; password: string }
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -160,7 +160,6 @@ export async function upsertSisregConfig(
       .update(sisregConfig)
       .set({
         baseUrl: config.baseUrl,
-        indexPath: config.indexPath,
         username: config.username,
         encryptedPassword,
       })
@@ -169,7 +168,6 @@ export async function upsertSisregConfig(
     await db.insert(sisregConfig).values({
       userId,
       baseUrl: config.baseUrl,
-      indexPath: config.indexPath,
       username: config.username,
       encryptedPassword,
     });
