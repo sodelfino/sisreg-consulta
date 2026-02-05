@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getLoginUrl } from "@/const";
 import { 
   Activity, 
+  BarChart3,
   Calendar, 
   CheckCircle2, 
   Clock, 
@@ -93,9 +94,9 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Main Selection Cards */}
+            {/* Main Selection Cards */}
           {isAuthenticated ? (
-            <div className="grid gap-6 md:grid-cols-2 max-w-4xl mx-auto">
+            <div className="grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
               {/* Marcações Card */}
               <Card className="card-hover cursor-pointer group relative overflow-hidden" onClick={() => setLocation("/consulta?tipo=marcacao")}>
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent" />
@@ -157,6 +158,39 @@ export default function Home() {
                     <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full">
                       <Clock className="h-3 w-3" />
                       Data de solicitação
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Dashboard Card */}
+              <Card className="card-hover cursor-pointer group relative overflow-hidden" onClick={() => setLocation("/dashboard")}>
+                <div className="absolute inset-0 bg-gradient-to-br from-chart-3/5 to-transparent" />
+                <CardHeader className="relative">
+                  <div className="h-16 w-16 rounded-xl bg-chart-3/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <BarChart3 className="h-8 w-8 text-chart-3" />
+                  </div>
+                  <CardTitle className="text-xl flex items-center gap-2">
+                    Dashboard
+                    <ArrowRight className="h-5 w-5 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                  </CardTitle>
+                  <CardDescription className="text-base">
+                    Visualize gráficos e estatísticas
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="relative">
+                  <div className="flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full">
+                      <BarChart3 className="h-3 w-3" />
+                      Gráficos interativos
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full">
+                      <FileSpreadsheet className="h-3 w-3" />
+                      Exportar Excel
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full">
+                      <TrendingUp className="h-3 w-3" />
+                      Análise de dados
                     </span>
                   </div>
                 </CardContent>

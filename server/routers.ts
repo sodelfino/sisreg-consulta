@@ -195,6 +195,120 @@ export const appRouter = router({
       }),
   }),
 
+  // Dashboard Aggregation
+  dashboard: router({
+    aggregate: protectedProcedure
+      .input(z.object({
+        indexType: indexTypeSchema.default("marcacao"),
+        mode: queryModeSchema,
+        dateStart: z.string().optional(),
+        dateEnd: z.string().optional(),
+        procedimentoFilter: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config = await getSisregConfig(ctx.user.id);
+        if (!config) {
+          return {
+            ok: false,
+            error: "Configuração não encontrada.",
+            data: null,
+          };
+        }
+
+        const password = decryptPassword(config.encryptedPassword);
+        
+        // Fetch a larger dataset for aggregation
+        const result = await executeSisregSearch(
+          {
+            baseUrl: config.baseUrl,
+            username: config.username,
+            password,
+          },
+          {
+            indexType: input.indexType,
+            mode: input.mode,
+            size: 1000,
+            from: 0,
+            dateStart: input.dateStart,
+            dateEnd: input.dateEnd,
+          }
+        );
+
+        if (!result.ok) {
+          return {
+            ok: false,
+            error: result.errorMessage || "Erro na consulta.",
+            data: null,
+          };
+        }
+
+        // Filter by procedimento if specified
+        let filteredHits = result.hits;
+        if (input.procedimentoFilter && input.procedimentoFilter.length > 0) {
+          filteredHits = result.hits.filter((hit) => {
+            const proc = String(hit.descricao_interna_procedimento || hit.nome_grupo_procedimento || "");
+            return input.procedimentoFilter!.some(f => proc.toLowerCase().includes(f.toLowerCase()));
+          });
+        }
+
+        // Aggregate by unidade
+        const unidadeField = input.indexType === "solicitacao" ? "nome_unidade_solicitante" : "nome_unidade_executante";
+        const byUnidade: Record<string, number> = {};
+        const byProcedimento: Record<string, number> = {};
+        const byRisco: Record<string, number> = {};
+        const byStatus: Record<string, number> = {};
+        const allProcedimentos: Set<string> = new Set();
+
+        for (const hit of filteredHits) {
+          // By unidade
+          const unidade = String(hit[unidadeField] || "N/A");
+          if (unidade !== "N/A") {
+            byUnidade[unidade] = (byUnidade[unidade] || 0) + 1;
+          }
+
+          // By procedimento
+          const proc = String(hit.descricao_interna_procedimento || hit.nome_grupo_procedimento || "N/A");
+          if (proc !== "N/A") {
+            byProcedimento[proc] = (byProcedimento[proc] || 0) + 1;
+            allProcedimentos.add(proc);
+          }
+
+          // By risco
+          const risco = String(hit.codigo_classificacao_risco || "N/A");
+          byRisco[risco] = (byRisco[risco] || 0) + 1;
+
+          // By status
+          const status = String(hit.status_solicitacao || hit.sigla_situacao || "N/A");
+          byStatus[status] = (byStatus[status] || 0) + 1;
+        }
+
+        return {
+          ok: true,
+          error: null,
+          data: {
+            total: filteredHits.length,
+            totalUnfiltered: result.total,
+            byUnidade: Object.entries(byUnidade)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 15)
+              .map(([name, value]) => ({ name, value })),
+            byProcedimento: Object.entries(byProcedimento)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 15)
+              .map(([name, value]) => ({ name, value })),
+            byRisco: Object.entries(byRisco)
+              .sort((a, b) => b[1] - a[1])
+              .map(([name, value]) => ({ name, value })),
+            byStatus: Object.entries(byStatus)
+              .sort((a, b) => b[1] - a[1])
+              .map(([name, value]) => ({ name, value })),
+            allProcedimentos: Array.from(allProcedimentos).sort(),
+            rawData: filteredHits,
+          },
+        };
+      }),
+  }),
+
   // LLM Insights
   insights: router({
     generate: protectedProcedure

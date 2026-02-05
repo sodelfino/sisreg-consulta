@@ -44,3 +44,15 @@
 - [x] Integrar endpoint de Solicitação Ambulatorial (solicitacao-ambulatorial-rj-macae)
 - [x] Criar tela de seleção inicial entre Solicitações e Marcações
 - [x] Adaptar filtros e campos para cada tipo de consulta
+
+
+## Versão 1.3 - Dashboard e Exportação Excel
+
+- [x] Instalar dependência xlsx para exportação Excel
+- [x] Criar página de Dashboard com gráficos (Recharts)
+- [x] Gráfico de distribuição por unidade
+- [x] Gráfico de distribuição por procedimento
+- [x] Filtros personalizáveis no dashboard
+- [x] Seleção de tipos de procedimentos para visualização
+- [x] Exportação de dados para Excel (XLSX)
+- [x] Integrar dashboard na navegação principal
