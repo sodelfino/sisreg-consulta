@@ -56,3 +56,8 @@
 - [x] Seleção de tipos de procedimentos para visualização
 - [x] Exportação de dados para Excel (XLSX)
 - [x] Integrar dashboard na navegação principal
+
+## Correções v1.3.1
+
+- [x] Corrigir busca de descrição de procedimento em Solicitações Ambulatoriais
+- [x] Corrigir filtros do Dashboard que retornam mesmo resultado

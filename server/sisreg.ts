@@ -77,8 +77,10 @@ function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknow
         bool: {
           should: [
             { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
+            { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
             { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
             { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
+            { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
             { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
           ],
           minimum_should_match: 1,
@@ -145,8 +147,10 @@ function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknow
       bool: {
         should: [
           { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
+          { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
           { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
           { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
+          { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
           { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
         ],
         minimum_should_match: 1,

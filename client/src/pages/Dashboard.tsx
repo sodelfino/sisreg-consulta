@@ -231,6 +231,19 @@ export default function Dashboard() {
 
   const dashboardData = aggregateMutation.data?.data;
 
+  // Effect to reload dashboard when procedimento filter changes
+  const handleApplyProcedimentoFilter = () => {
+    if (!configQuery.data) return;
+    
+    aggregateMutation.mutate({
+      indexType,
+      mode,
+      dateStart: dateStart || undefined,
+      dateEnd: dateEnd || undefined,
+      procedimentoFilter: selectedProcedimentos.length > 0 ? selectedProcedimentos : undefined,
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -445,7 +458,7 @@ export default function Dashboard() {
                         </Button>
                         <Button
                           size="sm"
-                          onClick={handleLoadDashboard}
+                          onClick={handleApplyProcedimentoFilter}
                         >
                           Aplicar filtro
                         </Button>

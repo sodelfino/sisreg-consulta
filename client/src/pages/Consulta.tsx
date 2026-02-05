@@ -295,6 +295,8 @@ export default function Consulta() {
       "telefone",
       estabelecimentoField,
       "descricao_interna_procedimento",
+      "descricao_sigtap_procedimento",
+      "nome_grupo_procedimento",
       "codigo_classificacao_risco",
       "status_solicitacao",
       ...modeFields.slice(0, 2),
