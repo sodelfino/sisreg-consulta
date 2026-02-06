@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,15 @@ export default function Dashboard() {
   // Filter state
   const [indexType, setIndexType] = useState<IndexType>("marcacao");
   const [mode, setMode] = useState<QueryMode>("quick");
+
+  // Mudar modo quando indexType mudar
+  useEffect(() => {
+    if (indexType === "solicitacao") {
+      setMode("fila");
+    } else if (mode === "fila") {
+      setMode("quick");
+    }
+  }, [indexType]);
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
   const [selectedProcedimentos, setSelectedProcedimentos] = useState<string[]>([]);
@@ -333,44 +342,53 @@ export default function Dashboard() {
                 </Select>
               </div>
 
-              {/* Mode */}
+              {/* Mode - modos específicos por tipo de índice */}
               <div className="space-y-1">
                 <Label className="text-xs">Modo</Label>
-                <Select value={mode} onValueChange={(v) => setMode(v as QueryMode)}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="quick">
-                      <span className="flex items-center gap-2">
-                        <Zap className="h-4 w-4" />
-                        Rápida
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="novas">
-                      <span className="flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
-                        Novas
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="agendadas">
-                      <span className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        Agendadas
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="atendidas">
-                      <span className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4" />
-                        Atendidas
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                {indexType === "solicitacao" ? (
+                  <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50">
+                    <span className="flex items-center gap-2 text-sm">
+                      <FileText className="h-4 w-4" />
+                      Fila de Solicitações
+                    </span>
+                  </div>
+                ) : (
+                  <Select value={mode} onValueChange={(v) => setMode(v as QueryMode)}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="quick">
+                        <span className="flex items-center gap-2">
+                          <Zap className="h-4 w-4" />
+                          Rápida
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="novas">
+                        <span className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          Novas
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="agendadas">
+                        <span className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4" />
+                          Agendadas
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="atendidas">
+                        <span className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Atendidas
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Date Range */}
-              {mode !== "quick" && (
+              {mode !== "quick" && mode !== "fila" && (
                 <>
                   <div className="space-y-1">
                     <Label className="text-xs">Data Inicial</Label>

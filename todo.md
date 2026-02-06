@@ -77,3 +77,14 @@
 - [x] Ajustar campos específicos para cada índice
 - [x] Ajustar filtros de data apropriados para cada tipo
 - [x] Atualizar frontend para refletir a separação correta
+
+
+## Correções Obrigatórias v2.1 - Documento de Ajustes
+
+- [x] Ajustar campos _source de Solicitações conforme documentação (22 campos específicos)
+- [x] Adicionar filtro obrigatório por centrais reguladoras ["32C164", "32C206", "32C211", "32C220"]
+- [x] Remover filtro de datas obrigatório de Solicitações (apenas central reguladora é obrigatório)
+- [x] Garantir construtores de query separados (buildQuerySolicitacaoAmbulatorial / buildQueryMarcacaoAmbulatorial)
+- [x] Separar dashboards para cada módulo (Solicitação vs Marcação)
+- [x] Garantir exportação XLSX funciona corretamente para ambos os módulos
+- [x] Ajustar colunas exibidas na tabela de Solicitações conforme campos reais

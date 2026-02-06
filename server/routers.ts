@@ -274,8 +274,10 @@ export const appRouter = router({
           const risco = String(hit.codigo_classificacao_risco || "N/A");
           byRisco[risco] = (byRisco[risco] || 0) + 1;
 
-          // By status
-          const status = String(hit.status_solicitacao || hit.sigla_situacao || "N/A");
+          // By status (marcação usa status_solicitacao, solicitação usa sigla_situacao)
+          const status = input.indexType === "solicitacao" 
+            ? String(hit.sigla_situacao || "N/A")
+            : String(hit.status_solicitacao || hit.sigla_situacao || "N/A");
           byStatus[status] = (byStatus[status] || 0) + 1;
         }
 

@@ -12,14 +12,14 @@ export type QueryMode = MarcacaoMode | SolicitacaoMode;
 
 export interface SisregQueryInput {
   indexType: IndexType;
-  mode: QueryMode; // Pode ser MarcacaoMode ou SolicitacaoMode dependendo do indexType
+  mode: QueryMode;
   size: number;
   from?: number;
   dateStart?: string;
   dateEnd?: string;
   codigoCentralReguladora?: string[];
   selectedFields?: string[];
-  procedimentoSearch?: string; // Busca parcial por descrição/nome do procedimento
+  procedimentoSearch?: string;
 }
 
 export interface SisregQueryResult {
@@ -43,7 +43,10 @@ export const INDEX_LABELS = {
   solicitacao: "Solicitações Ambulatoriais",
 };
 
-// Status values for "agendadas" query
+// Centrais reguladoras obrigatórias para Solicitação Ambulatorial (Macaé)
+export const CENTRAIS_REGULADORAS_MACAE = ["32C164", "32C206", "32C211", "32C220"];
+
+// Status values for "agendadas" query (Marcação)
 export const STATUS_AGENDADAS = [
   "SOLICITAÇÃO / AGENDADA / FILA DE ESPERA",
   "SOLICITAÇÃO / AGENDADA / SOLICITANTE",
@@ -52,12 +55,15 @@ export const STATUS_AGENDADAS = [
   "SOLICITAÇÃO / AGENDADA / COORDENADOR",
 ];
 
-// Status values for "atendidas" query
+// Status values for "atendidas" query (Marcação)
 export const STATUS_ATENDIDAS = [
   "AGENDAMENTO / CONFIRMADO / EXECUTANTE",
 ];
 
-// Default fields to return for each query type - MARCAÇÃO
+// ============================================================
+// CAMPOS _SOURCE - MARCAÇÃO AMBULATORIAL
+// Endpoint: /marcacao-ambulatorial-rj-macae/_search
+// ============================================================
 export const DEFAULT_FIELDS_MARCACAO = {
   common: [
     "codigo_solicitacao",
@@ -74,7 +80,7 @@ export const DEFAULT_FIELDS_MARCACAO = {
     "codigo_classificacao_risco",
     "status_solicitacao",
     "sigla_situacao",
-    "nome_unidade_executante", // Estabelecimento
+    "nome_unidade_executante",
   ],
   novas: [
     "data_solicitacao",
@@ -107,40 +113,44 @@ export const DEFAULT_FIELDS_MARCACAO = {
   ],
 };
 
-// Default fields to return for SOLICITAÇÃO (Fila)
-// Nota: descricao_interna_procedimento e descricao_sigtap_procedimento NÃO existem neste índice
-// Solicitações só tem modo "fila" (não tem novas/agendadas/atendidas)
+// ============================================================
+// CAMPOS _SOURCE - SOLICITAÇÃO AMBULATORIAL (FILA)
+// Endpoint: /solicitacao-ambulatorial-rj-macae/_search
+// Conforme documentação v2.1
+// ============================================================
 export const DEFAULT_FIELDS_SOLICITACAO = {
   common: [
-    "codigo_solicitacao",
-    "no_usuario",
-    "cns_usuario",
-    "sexo_usuario",
-    "dt_nascimento_usuario",
-    "municipio_paciente_residencia",
-    "telefone",
-    "codigo_interno_procedimento",
-    "nome_grupo_procedimento",
-    "codigo_classificacao_risco",
-    "status_solicitacao",
-    "sigla_situacao",
-    "nome_unidade_solicitante", // Estabelecimento solicitante
-  ],
-  fila: [
-    "data_solicitacao",
+    // Campos conforme documentação v2.1
     "codigo_central_reguladora",
-    "nome_central_reguladora",
+    "codigo_central_solicitante",
+    "data_solicitacao",
     "codigo_unidade_solicitante",
     "nome_unidade_solicitante",
     "nome_medico_solicitante",
+    "cpf_profissional_solicitante",
+    "sigla_situacao",
+    "codigo_interno_procedimento",
+    "descricao_interna_procedimento",
+    "codigo_classificacao_risco",
+    "cns_usuario",
+    "no_usuario",
+    "no_mae_usuario",
+    "dt_nascimento_usuario",
+    "municipio_paciente_residencia",
+    "sexo_usuario",
+    "telefone",
+    "codigo_grupo_procedimento",
+    "nome_grupo_procedimento",
+    "codigo_tipo_regulacao",
   ],
+  fila: [] as string[], // Todos os campos já estão em common
 };
 
 // Alias para compatibilidade
 export const DEFAULT_FIELDS = DEFAULT_FIELDS_MARCACAO;
 
-// All available fields for marcação/solicitação ambulatorial
-export const ALL_AVAILABLE_FIELDS = [
+// All available fields for marcação ambulatorial
+export const ALL_FIELDS_MARCACAO = [
   { key: "codigo_solicitacao", label: "Código Solicitação", category: "identificacao" },
   { key: "no_usuario", label: "Nome Paciente", category: "paciente" },
   { key: "cns_usuario", label: "CNS Paciente", category: "paciente" },
@@ -179,6 +189,34 @@ export const ALL_AVAILABLE_FIELDS = [
   { key: "sigla_situacao", label: "Sigla Situação", category: "status" },
   { key: "codigo_tipo_regulacao", label: "Tipo Regulação", category: "status" },
 ];
+
+// All available fields for solicitação ambulatorial
+export const ALL_FIELDS_SOLICITACAO = [
+  { key: "codigo_central_reguladora", label: "Código Central Reguladora", category: "unidade" },
+  { key: "codigo_central_solicitante", label: "Código Central Solicitante", category: "unidade" },
+  { key: "data_solicitacao", label: "Data Solicitação", category: "datas" },
+  { key: "codigo_unidade_solicitante", label: "Código Unidade Solicitante", category: "unidade" },
+  { key: "nome_unidade_solicitante", label: "Nome Unidade Solicitante", category: "unidade" },
+  { key: "nome_medico_solicitante", label: "Médico Solicitante", category: "profissional" },
+  { key: "cpf_profissional_solicitante", label: "CPF Profissional Solicitante", category: "profissional" },
+  { key: "sigla_situacao", label: "Sigla Situação", category: "status" },
+  { key: "codigo_interno_procedimento", label: "Código Procedimento", category: "procedimento" },
+  { key: "descricao_interna_procedimento", label: "Descrição Procedimento", category: "procedimento" },
+  { key: "codigo_classificacao_risco", label: "Classificação Risco", category: "procedimento" },
+  { key: "cns_usuario", label: "CNS Paciente", category: "paciente" },
+  { key: "no_usuario", label: "Nome Paciente", category: "paciente" },
+  { key: "no_mae_usuario", label: "Nome da Mãe", category: "paciente" },
+  { key: "dt_nascimento_usuario", label: "Data Nascimento", category: "paciente" },
+  { key: "municipio_paciente_residencia", label: "Município Residência", category: "paciente" },
+  { key: "sexo_usuario", label: "Sexo", category: "paciente" },
+  { key: "telefone", label: "Telefone", category: "paciente" },
+  { key: "codigo_grupo_procedimento", label: "Código Grupo Procedimento", category: "procedimento" },
+  { key: "nome_grupo_procedimento", label: "Nome Grupo Procedimento", category: "procedimento" },
+  { key: "codigo_tipo_regulacao", label: "Tipo Regulação", category: "status" },
+];
+
+// Backward compatibility: combined list
+export const ALL_AVAILABLE_FIELDS = ALL_FIELDS_MARCACAO;
 
 export const FIELD_CATEGORIES = [
   { key: "identificacao", label: "Identificação" },

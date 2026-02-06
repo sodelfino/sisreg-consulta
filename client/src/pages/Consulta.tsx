@@ -36,7 +36,8 @@ import {
 import { Link, useLocation } from "wouter";
 import { getLoginUrl } from "@/const";
 import { 
-  ALL_AVAILABLE_FIELDS, 
+  ALL_FIELDS_MARCACAO,
+  ALL_FIELDS_SOLICITACAO,
   FIELD_CATEGORIES, 
   DEFAULT_FIELDS_MARCACAO,
   DEFAULT_FIELDS_SOLICITACAO,
@@ -259,9 +260,14 @@ export default function Consulta() {
     );
   };
 
+  // Get available fields based on index type
+  const availableFields = useMemo(() => {
+    return indexType === "solicitacao" ? ALL_FIELDS_SOLICITACAO : ALL_FIELDS_MARCACAO;
+  }, [indexType]);
+
   // Select all fields in category
   const toggleCategory = (category: string) => {
-    const categoryFields = ALL_AVAILABLE_FIELDS
+    const categoryFields = availableFields
       .filter((f) => f.category === category)
       .map((f) => f.key);
     
@@ -306,20 +312,35 @@ export default function Consulta() {
     }
     
     // Colunas de procedimento dependem do tipo de índice
-    const procedimentoCols = indexType === "marcacao" 
-      ? ["descricao_interna_procedimento", "descricao_sigtap_procedimento", "nome_grupo_procedimento"]
-      : ["nome_grupo_procedimento", "codigo_interno_procedimento"];
-    
-    return [
-      "codigo_solicitacao",
-      "no_usuario",
-      "telefone",
-      estabelecimentoField,
-      ...procedimentoCols,
-      "codigo_classificacao_risco",
-      "status_solicitacao",
-      ...modeFields.slice(0, 2),
-    ];
+    if (indexType === "marcacao") {
+      return [
+        "codigo_solicitacao",
+        "no_usuario",
+        "telefone",
+        estabelecimentoField,
+        "descricao_interna_procedimento",
+        "descricao_sigtap_procedimento",
+        "nome_grupo_procedimento",
+        "codigo_classificacao_risco",
+        "status_solicitacao",
+        ...modeFields.slice(0, 2),
+      ];
+    } else {
+      // Solicitação: campos específicos da fila
+      return [
+        "no_usuario",
+        "cns_usuario",
+        "telefone",
+        "nome_unidade_solicitante",
+        "descricao_interna_procedimento",
+        "nome_grupo_procedimento",
+        "codigo_classificacao_risco",
+        "sigla_situacao",
+        "data_solicitacao",
+        "nome_medico_solicitante",
+        "codigo_tipo_regulacao",
+      ];
+    }
   }, [selectedFields, mode, indexType]);
 
   // Format cell value
@@ -356,7 +377,7 @@ export default function Consulta() {
     if (key === "nome_unidade_executante") return "Estabelecimento";
     if (key === "nome_unidade_solicitante") return "Unidade Solicitante";
     
-    const field = ALL_AVAILABLE_FIELDS.find((f) => f.key === key);
+    const field = availableFields.find((f) => f.key === key);
     return field?.label || key;
   };
 
@@ -634,7 +655,7 @@ export default function Consulta() {
                 <CardContent>
                   <ScrollArea className="h-[300px] pr-4">
                     {FIELD_CATEGORIES.map((category) => {
-                      const categoryFields = ALL_AVAILABLE_FIELDS.filter(
+                      const categoryFields = availableFields.filter(
                         (f) => f.category === category.key
                       );
                       const selectedCount = categoryFields.filter((f) =>

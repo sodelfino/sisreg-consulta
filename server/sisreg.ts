@@ -1,6 +1,12 @@
 /**
  * SISREG Elasticsearch Integration Service
- * Handles all communication with the SISREG API
+ * 
+ * DOIS MÓDULOS SEPARADOS:
+ * - Marcação Ambulatorial: /marcacao-ambulatorial-rj-macae/_search
+ *   Modos: quick, novas, agendadas, atendidas
+ * 
+ * - Solicitação Ambulatorial (Fila): /solicitacao-ambulatorial-rj-macae/_search
+ *   Modo: fila (filtro obrigatório por centrais reguladoras)
  */
 
 import {
@@ -10,6 +16,7 @@ import {
   STATUS_ATENDIDAS,
   DEFAULT_FIELDS_MARCACAO,
   DEFAULT_FIELDS_SOLICITACAO,
+  CENTRAIS_REGULADORAS_MACAE,
   INDEX_PATHS,
   IndexType,
   MarcacaoMode,
@@ -29,11 +36,12 @@ function getIndexPath(indexType: IndexType): string {
   return INDEX_PATHS[indexType];
 }
 
-/**
- * Build query for MARCAÇÃO AMBULATORIAL
- * Supports: quick, novas, agendadas, atendidas
- */
-function buildMarcacaoQuery(
+// ============================================================
+// CONSTRUTOR DE QUERY: MARCAÇÃO AMBULATORIAL
+// Endpoint: /marcacao-ambulatorial-rj-macae/_search
+// Modos: quick, novas, agendadas, atendidas
+// ============================================================
+function buildQueryMarcacaoAmbulatorial(
   mode: MarcacaoMode,
   size: number,
   from: number,
@@ -55,111 +63,76 @@ function buildMarcacaoQuery(
     ? selectedFields 
     : [...defaultFields.common, ...modeFields];
 
-  // Base query structure
   const query: Record<string, unknown> = {
-    size: Math.min(size, 1000), // Limit to 1000 max
+    size: Math.min(size, 1000),
     from,
     _source: fieldsToReturn,
   };
 
+  // Build must clauses
+  const mustClauses: Record<string, unknown>[] = [];
+
   // Quick mode: just return latest records
   if (mode === "quick") {
     query.sort = [{ data_solicitacao: { order: "desc" } }];
-    
-    const quickMustClauses: Record<string, unknown>[] = [];
-    
-    // Add optional filter by central reguladora
-    if (codigoCentralReguladora && codigoCentralReguladora.length > 0) {
-      quickMustClauses.push({ terms: { codigo_central_reguladora: codigoCentralReguladora } });
-    }
-    
-    // Add procedimento search filter (wildcard search)
-    if (procedimentoSearch && procedimentoSearch.trim()) {
-      const searchTerm = procedimentoSearch.trim().toLowerCase();
-      const shouldClauses: Array<Record<string, unknown>> = [
-        { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
-        { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
-        { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
-        { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
-        { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
-        { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
-      ];
-      
-      quickMustClauses.push({
-        bool: {
-          should: shouldClauses,
-          minimum_should_match: 1,
+  } else {
+    // Add date range based on mode
+    if (dateStart && dateEnd) {
+      let dateField = "data_solicitacao";
+      if (mode === "agendadas") dateField = "data_aprovacao";
+      if (mode === "atendidas") dateField = "data_confirmacao";
+
+      mustClauses.push({
+        range: {
+          [dateField]: {
+            gte: dateStart,
+            lte: dateEnd,
+          },
         },
       });
     }
-    
-    if (quickMustClauses.length > 0) {
-      query.query = {
-        bool: {
-          must: quickMustClauses,
-        },
-      };
+
+    // Add status filter for agendadas/atendidas
+    if (mode === "agendadas") {
+      mustClauses.push({
+        terms: { "status_solicitacao.keyword": STATUS_AGENDADAS },
+      });
+    } else if (mode === "atendidas") {
+      mustClauses.push({
+        terms: { "status_solicitacao.keyword": STATUS_ATENDIDAS },
+      });
     }
-    
-    return query;
+
+    // Add sorting
+    if (mode === "novas") {
+      query.sort = [{ data_solicitacao: { order: "desc" } }];
+    } else if (mode === "agendadas") {
+      query.sort = [{ data_aprovacao: { order: "asc" } }];
+    } else if (mode === "atendidas") {
+      query.sort = [{ data_confirmacao: { order: "desc" } }];
+    }
   }
 
-  // Build must clauses for filtered queries
-  const mustClauses: Record<string, unknown>[] = [];
-
-  // Add date range based on mode
-  if (dateStart && dateEnd) {
-    let dateField = "data_solicitacao";
-    if (mode === "agendadas") dateField = "data_aprovacao";
-    if (mode === "atendidas") dateField = "data_confirmacao";
-
-    mustClauses.push({
-      range: {
-        [dateField]: {
-          gte: dateStart,
-          lte: dateEnd,
-        },
-      },
-    });
-  }
-
-  // Add status filter for agendadas/atendidas
-  if (mode === "agendadas") {
-    mustClauses.push({
-      terms: {
-        "status_solicitacao.keyword": STATUS_AGENDADAS,
-      },
-    });
-  } else if (mode === "atendidas") {
-    mustClauses.push({
-      terms: {
-        "status_solicitacao.keyword": STATUS_ATENDIDAS,
-      },
-    });
-  }
-
-  // Add optional filter by central reguladora
+  // Optional filter by central reguladora
   if (codigoCentralReguladora && codigoCentralReguladora.length > 0) {
     mustClauses.push({
       terms: { codigo_central_reguladora: codigoCentralReguladora },
     });
   }
 
-  // Add procedimento search filter
+  // Procedimento search filter (marcação tem descricao_interna, descricao_sigtap, nome_grupo)
   if (procedimentoSearch && procedimentoSearch.trim()) {
     const searchTerm = procedimentoSearch.trim().toLowerCase();
-    const shouldClauses: Array<Record<string, unknown>> = [
-      { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
-      { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
-      { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
-      { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
-      { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
-      { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
-    ];
-    
     mustClauses.push({
       bool: {
-        should: shouldClauses,
+        should: [
+          { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
+          { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
+          { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
+          { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
+          { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
+          { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
+        ],
         minimum_should_match: 1,
       },
     });
@@ -168,59 +141,52 @@ function buildMarcacaoQuery(
   // Build final query
   if (mustClauses.length > 0) {
     query.query = {
-      bool: {
-        must: mustClauses,
-      },
+      bool: { must: mustClauses },
     };
-  }
-
-  // Add sorting
-  if (mode === "novas") {
-    query.sort = [{ data_solicitacao: { order: "desc" } }];
-  } else if (mode === "agendadas") {
-    query.sort = [{ data_aprovacao: { order: "asc" } }];
-  } else if (mode === "atendidas") {
-    query.sort = [{ data_confirmacao: { order: "desc" } }];
   }
 
   return query;
 }
 
-/**
- * Build query for SOLICITAÇÃO AMBULATORIAL (Fila)
- * Only supports: fila mode
- */
-function buildSolicitacaoQuery(
-  mode: SolicitacaoMode,
+// ============================================================
+// CONSTRUTOR DE QUERY: SOLICITAÇÃO AMBULATORIAL (FILA)
+// Endpoint: /solicitacao-ambulatorial-rj-macae/_search
+// Modo: fila
+// FILTRO OBRIGATÓRIO: centrais reguladoras de Macaé
+// ============================================================
+function buildQuerySolicitacaoAmbulatorial(
+  _mode: SolicitacaoMode,
   size: number,
   from: number,
   dateStart?: string,
   dateEnd?: string,
-  codigoCentralReguladora?: string[],
+  _codigoCentralReguladora?: string[],
   selectedFields?: string[],
   procedimentoSearch?: string
 ): Record<string, unknown> {
   const defaultFields = DEFAULT_FIELDS_SOLICITACAO;
 
-  // Solicitação só tem modo "fila"
-  const modeFields = defaultFields.fila;
-  
   const fieldsToReturn = selectedFields && selectedFields.length > 0 
     ? selectedFields 
-    : [...defaultFields.common, ...modeFields];
+    : [...defaultFields.common, ...defaultFields.fila];
 
-  // Base query structure
   const query: Record<string, unknown> = {
-    size: Math.min(size, 1000), // Limit to 1000 max
+    size: Math.min(size, 1000),
     from,
     _source: fieldsToReturn,
-    sort: [{ data_solicitacao: { order: "desc" } }], // Sempre ordena por data de solicitação
+    sort: [{ data_solicitacao: { order: "desc" } }],
   };
 
   // Build must clauses
   const mustClauses: Record<string, unknown>[] = [];
 
-  // Add date range (sempre usa data_solicitacao para fila)
+  // FILTRO OBRIGATÓRIO: centrais reguladoras de Macaé
+  // Conforme documentação v2.1, este é o único filtro obrigatório
+  mustClauses.push({
+    terms: { codigo_central_reguladora: CENTRAIS_REGULADORAS_MACAE },
+  });
+
+  // Optional date range (usa data_solicitacao para fila)
   if (dateStart && dateEnd) {
     mustClauses.push({
       range: {
@@ -232,68 +198,48 @@ function buildSolicitacaoQuery(
     });
   }
 
-  // Add optional filter by central reguladora
-  if (codigoCentralReguladora && codigoCentralReguladora.length > 0) {
-    mustClauses.push({
-      terms: { codigo_central_reguladora: codigoCentralReguladora },
-    });
-  }
-
-  // Add procedimento search filter (only nome_grupo_procedimento exists in solicitacao)
+  // Procedimento search filter
+  // Solicitação tem: descricao_interna_procedimento, nome_grupo_procedimento
   if (procedimentoSearch && procedimentoSearch.trim()) {
     const searchTerm = procedimentoSearch.trim().toLowerCase();
-    const shouldClauses: Array<Record<string, unknown>> = [
-      { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
-      { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
-    ];
-    
     mustClauses.push({
       bool: {
-        should: shouldClauses,
+        should: [
+          { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
+          { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
+          { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
+          { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
+        ],
         minimum_should_match: 1,
       },
     });
   }
 
-  // Build final query
-  if (mustClauses.length > 0) {
-    query.query = {
-      bool: {
-        must: mustClauses,
-      },
-    };
-  }
+  // Build final query (sempre terá pelo menos o filtro de centrais reguladoras)
+  query.query = {
+    bool: { must: mustClauses },
+  };
 
   return query;
 }
 
 /**
- * Main query builder - delegates to specific builders
+ * Main query builder - delegates to specific builders based on indexType
  */
 function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknown> {
   const { indexType, mode, size, from = 0, dateStart, dateEnd, codigoCentralReguladora, selectedFields, procedimentoSearch } = input;
 
   if (indexType === "marcacao") {
-    return buildMarcacaoQuery(
-      mode as MarcacaoMode,
-      size,
-      from,
-      dateStart,
-      dateEnd,
-      codigoCentralReguladora,
-      selectedFields,
-      procedimentoSearch
+    return buildQueryMarcacaoAmbulatorial(
+      mode as MarcacaoMode, size, from,
+      dateStart, dateEnd, codigoCentralReguladora,
+      selectedFields, procedimentoSearch
     );
   } else {
-    return buildSolicitacaoQuery(
-      mode as SolicitacaoMode,
-      size,
-      from,
-      dateStart,
-      dateEnd,
-      codigoCentralReguladora,
-      selectedFields,
-      procedimentoSearch
+    return buildQuerySolicitacaoAmbulatorial(
+      mode as SolicitacaoMode, size, from,
+      dateStart, dateEnd, codigoCentralReguladora,
+      selectedFields, procedimentoSearch
     );
   }
 }
@@ -311,7 +257,6 @@ export async function executeSisregSearch(
   const url = `${baseUrl}${indexPath}`;
   const esQuery = buildElasticsearchQuery(input);
 
-  // Create Basic Auth header
   const authHeader = "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
 
   try {
@@ -362,7 +307,6 @@ export async function executeSisregSearch(
         : data.hits.total.value || 0;
     }
 
-    // Extract hits
     const hits = data.hits?.hits?.map((hit) => hit._source || {}) || [];
 
     return {
@@ -384,13 +328,11 @@ export async function executeSisregSearch(
   }
 }
 
-
 /**
  * Test SISREG connection with credentials
  */
 export async function testSisregConnection(credentials: SisregCredentials): Promise<{ ok: boolean; message: string }> {
   try {
-    // Try a simple query with size 1 to test connection
     const result = await executeSisregSearch(credentials, {
       indexType: "marcacao",
       mode: "quick",
