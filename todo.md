@@ -135,3 +135,8 @@
 - [x] Testes unitários: builders separados
 - [x] Testes unitários: rota de busca
 - [x] Testes unitários: exportação
+
+## Bugs v3.1
+
+- [x] Bug 1: Navegação inicial - card Solicitações abre Marcações primeiro
+- [x] Bug 2: Fila de Solicitações retorna 0 resultados (campo de data/central errado)

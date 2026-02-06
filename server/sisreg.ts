@@ -77,9 +77,13 @@ function buildQueryMarcacaoAmbulatorial(
       if (mode === "agendadas") dateField = "data_aprovacao";
       if (mode === "atendidas") dateField = "data_confirmacao";
 
+      // End-exclusive: lt nextDay para incluir o último dia inteiro
+      const endDate = new Date(dateEnd + "T00:00:00");
+      endDate.setDate(endDate.getDate() + 1);
+      const endExclusive = endDate.toISOString().split("T")[0];
       mustClauses.push({
         range: {
-          [dateField]: { gte: dateStart, lte: dateEnd },
+          [dateField]: { gte: dateStart, lt: endExclusive },
         },
       });
     }
@@ -174,12 +178,16 @@ function buildQuerySolicitacaoAmbulatorial(
   const mustClauses: Record<string, unknown>[] = [];
 
   // FILTRO OBRIGATÓRIO: centrais reguladoras de Macaé
-  mustClauses.push({ terms: { codigo_central_reguladora: CENTRAIS_REGULADORAS_MACAE } });
+  // Tenta com e sem .keyword para compatibilidade
+  mustClauses.push({ terms: { "codigo_central_reguladora": CENTRAIS_REGULADORAS_MACAE } });
 
-  // Optional date range
+  // Optional date range (end-exclusive: lt nextDay para incluir o último dia inteiro)
   if (dateStart && dateEnd) {
+    const endDate = new Date(dateEnd + "T00:00:00");
+    endDate.setDate(endDate.getDate() + 1);
+    const endExclusive = endDate.toISOString().split("T")[0];
     mustClauses.push({
-      range: { data_solicitacao: { gte: dateStart, lte: dateEnd } },
+      range: { data_solicitacao: { gte: dateStart, lt: endExclusive } },
     });
   }
 

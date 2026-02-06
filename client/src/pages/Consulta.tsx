@@ -34,7 +34,7 @@ import {
   FileText,
   Building2,
 } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { getLoginUrl } from "@/const";
 import { 
   ALL_FIELDS_MARCACAO,
@@ -62,8 +62,11 @@ export default function Consulta() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
 
-  // Index type state
-  const [indexType, setIndexType] = useState<IndexType>("marcacao");
+  // Index type state - read from URL query param
+  const searchParams = useSearch();
+  const initialType = new URLSearchParams(searchParams).get("tipo") as IndexType | null;
+  const [indexType, setIndexType] = useState<IndexType>(initialType === "solicitacao" ? "solicitacao" : "marcacao");
+  const [initialMode] = useState<QueryMode>(initialType === "solicitacao" ? "fila" : "quick");
   
   // Mudar modo quando indexType mudar
   useEffect(() => {
@@ -75,7 +78,7 @@ export default function Consulta() {
   }, [indexType]);
 
   // Query state
-  const [mode, setMode] = useState<QueryMode>("quick");
+  const [mode, setMode] = useState<QueryMode>(initialMode);
   const [size, setSize] = useState(100);
   const [from, setFrom] = useState(0);
   const [dateStart, setDateStart] = useState("");
