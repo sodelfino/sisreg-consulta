@@ -20,7 +20,7 @@ import { IndexType, QueryMode } from "../shared/sisreg";
 import { invokeLLM } from "./_core/llm";
 
 const indexTypeSchema = z.enum(["marcacao", "solicitacao"]);
-const queryModeSchema = z.enum(["quick", "novas", "agendadas", "atendidas"]);
+const queryModeSchema = z.enum(["quick", "novas", "agendadas", "atendidas", "fila"]);
 
 export const appRouter = router({
   system: systemRouter,
@@ -75,14 +75,11 @@ export const appRouter = router({
         }
 
         const password = decryptPassword(config.encryptedPassword);
-        return testSisregConnection(
-          {
-            baseUrl: config.baseUrl,
-            username: config.username,
-            password,
-          },
-          input?.indexType || "marcacao"
-        );
+        return testSisregConnection({
+          baseUrl: config.baseUrl,
+          username: config.username,
+          password,
+        });
       }),
   }),
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,15 @@ export default function Consulta() {
 
   // Index type state
   const [indexType, setIndexType] = useState<IndexType>("marcacao");
+  
+  // Mudar modo quando indexType mudar
+  useEffect(() => {
+    if (indexType === "solicitacao") {
+      setMode("fila");
+    } else if (mode === "fila") {
+      setMode("quick");
+    }
+  }, [indexType]);
 
   // Query state
   const [mode, setMode] = useState<QueryMode>("quick");
@@ -284,10 +293,17 @@ export default function Consulta() {
     }
     
     // Colunas padrão: paciente, procedimento, telefone, estabelecimento e campos do modo
-    const modeFields = mode === "novas" ? defaultFields.novas :
-                       mode === "agendadas" ? defaultFields.agendadas :
-                       mode === "atendidas" ? defaultFields.atendidas :
-                       defaultFields.novas;
+    let modeFields: string[];
+    if (indexType === "marcacao") {
+      const marcacaoFields = defaultFields as typeof import("@shared/sisreg").DEFAULT_FIELDS_MARCACAO;
+      modeFields = mode === "novas" ? marcacaoFields.novas :
+                   mode === "agendadas" ? marcacaoFields.agendadas :
+                   mode === "atendidas" ? marcacaoFields.atendidas :
+                   marcacaoFields.novas;
+    } else {
+      const solicitacaoFields = defaultFields as typeof import("@shared/sisreg").DEFAULT_FIELDS_SOLICITACAO;
+      modeFields = solicitacaoFields.fila;
+    }
     
     // Colunas de procedimento dependem do tipo de índice
     const procedimentoCols = indexType === "marcacao" 
@@ -475,24 +491,33 @@ export default function Consulta() {
               <CardContent className="space-y-4">
                 {/* Query Mode */}
                 <Tabs value={mode} onValueChange={(v) => setMode(v as QueryMode)}>
-                  <TabsList className="grid grid-cols-2 h-auto">
-                    <TabsTrigger value="quick" className="text-xs py-2">
-                      <Zap className="mr-1 h-3 w-3" />
-                      Rápida
-                    </TabsTrigger>
-                    <TabsTrigger value="novas" className="text-xs py-2">
-                      <Clock className="mr-1 h-3 w-3" />
-                      Novas
-                    </TabsTrigger>
-                    <TabsTrigger value="agendadas" className="text-xs py-2">
-                      <Calendar className="mr-1 h-3 w-3" />
-                      Agendadas
-                    </TabsTrigger>
-                    <TabsTrigger value="atendidas" className="text-xs py-2">
-                      <CheckCircle2 className="mr-1 h-3 w-3" />
-                      Atendidas
-                    </TabsTrigger>
-                  </TabsList>
+                  {indexType === "marcacao" ? (
+                    <TabsList className="grid grid-cols-2 h-auto">
+                      <TabsTrigger value="quick" className="text-xs py-2">
+                        <Zap className="mr-1 h-3 w-3" />
+                        Rápida
+                      </TabsTrigger>
+                      <TabsTrigger value="novas" className="text-xs py-2">
+                        <Clock className="mr-1 h-3 w-3" />
+                        Novas
+                      </TabsTrigger>
+                      <TabsTrigger value="agendadas" className="text-xs py-2">
+                        <Calendar className="mr-1 h-3 w-3" />
+                        Agendadas
+                      </TabsTrigger>
+                      <TabsTrigger value="atendidas" className="text-xs py-2">
+                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                        Atendidas
+                      </TabsTrigger>
+                    </TabsList>
+                  ) : (
+                    <TabsList className="grid grid-cols-1 h-auto">
+                      <TabsTrigger value="fila" className="text-xs py-2">
+                        <Database className="mr-1 h-3 w-3" />
+                        Fila de Solicitações
+                      </TabsTrigger>
+                    </TabsList>
+                  )}
                 </Tabs>
 
                 {/* Date Range */}

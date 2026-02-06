@@ -67,3 +67,13 @@
 
 - [x] Corrigir campos de descrição de procedimento em Solicitações Ambulatoriais (retornando vazio)
 - [x] Verificar e ajustar campos corretos da API para solicitações vs marcações
+
+
+## Refatoração v2.0 - Separação Completa dos Índices
+
+- [x] Criar construtores de query separados (buildMarcacaoQuery e buildSolicitacaoQuery)
+- [x] Remover modos Novas/Agendadas/Atendidas de Solicitações Ambulatoriais
+- [x] Solicitações deve ter apenas modo "Fila" (sem subdivisões)
+- [x] Ajustar campos específicos para cada índice
+- [x] Ajustar filtros de data apropriados para cada tipo
+- [x] Atualizar frontend para refletir a separação correta

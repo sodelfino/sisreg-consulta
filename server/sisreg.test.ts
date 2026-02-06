@@ -96,8 +96,8 @@ describe("SISREG Elasticsearch Service", () => {
       });
 
       expect(result.ok).toBe(false);
-      expect(result.status).toBe(0);
-      expect(result.errorMessage).toContain("Erro de conexão");
+      expect(result.status).toBe(500);
+      expect(result.errorMessage).toContain("Network error");
     });
 
     it("should build correct query for novas mode with date range", async () => {
@@ -203,7 +203,7 @@ describe("SISREG Elasticsearch Service", () => {
       const result = await testSisregConnection(mockCredentials);
 
       expect(result.ok).toBe(true);
-      expect(result.message).toContain("Conexão bem sucedida");
+      expect(result.message).toContain("Conexão estabelecida com sucesso");
     });
 
     it("should return failure on invalid credentials", async () => {

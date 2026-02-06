@@ -12,6 +12,8 @@ import {
   DEFAULT_FIELDS_SOLICITACAO,
   INDEX_PATHS,
   IndexType,
+  MarcacaoMode,
+  SolicitacaoMode,
 } from "../shared/sisreg";
 
 interface SisregCredentials {
@@ -28,19 +30,20 @@ function getIndexPath(indexType: IndexType): string {
 }
 
 /**
- * Get default fields based on index type
+ * Build query for MARCAÇÃO AMBULATORIAL
+ * Supports: quick, novas, agendadas, atendidas
  */
-function getDefaultFields(indexType: IndexType) {
-  return indexType === "solicitacao" ? DEFAULT_FIELDS_SOLICITACAO : DEFAULT_FIELDS_MARCACAO;
-}
-
-/**
- * Build Elasticsearch query based on mode and parameters
- */
-function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknown> {
-  const { indexType, mode, size, from = 0, dateStart, dateEnd, codigoCentralReguladora, selectedFields, procedimentoSearch } = input;
-
-  const defaultFields = getDefaultFields(indexType);
+function buildMarcacaoQuery(
+  mode: MarcacaoMode,
+  size: number,
+  from: number,
+  dateStart?: string,
+  dateEnd?: string,
+  codigoCentralReguladora?: string[],
+  selectedFields?: string[],
+  procedimentoSearch?: string
+): Record<string, unknown> {
+  const defaultFields = DEFAULT_FIELDS_MARCACAO;
 
   // Determine which fields to return
   const modeFields = mode === "novas" ? defaultFields.novas :
@@ -76,17 +79,11 @@ function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknow
       const shouldClauses: Array<Record<string, unknown>> = [
         { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
         { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
+        { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
+        { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
+        { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
+        { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
       ];
-      
-      // Only add descricao fields for marcacao index
-      if (indexType === "marcacao") {
-        shouldClauses.push(
-          { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
-          { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
-          { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } }
-        );
-      }
       
       quickMustClauses.push({
         bool: {
@@ -148,23 +145,17 @@ function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknow
     });
   }
 
-  // Add procedimento search filter (wildcard search for partial matching)
+  // Add procedimento search filter
   if (procedimentoSearch && procedimentoSearch.trim()) {
     const searchTerm = procedimentoSearch.trim().toLowerCase();
     const shouldClauses: Array<Record<string, unknown>> = [
       { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
       { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
+      { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
+      { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
+      { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
+      { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
     ];
-    
-    // Only add descricao fields for marcacao index
-    if (indexType === "marcacao") {
-      shouldClauses.push(
-        { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
-        { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
-        { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
-        { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } }
-      );
-    }
     
     mustClauses.push({
       bool: {
@@ -184,16 +175,131 @@ function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknow
   }
 
   // Add sorting
-  const sortField = mode === "agendadas" ? "data_aprovacao" :
-                    mode === "atendidas" ? "data_confirmacao" :
-                    "data_solicitacao";
-  query.sort = [{ [sortField]: { order: "desc" } }];
+  if (mode === "novas") {
+    query.sort = [{ data_solicitacao: { order: "desc" } }];
+  } else if (mode === "agendadas") {
+    query.sort = [{ data_aprovacao: { order: "asc" } }];
+  } else if (mode === "atendidas") {
+    query.sort = [{ data_confirmacao: { order: "desc" } }];
+  }
 
   return query;
 }
 
 /**
- * Execute search against SISREG Elasticsearch
+ * Build query for SOLICITAÇÃO AMBULATORIAL (Fila)
+ * Only supports: fila mode
+ */
+function buildSolicitacaoQuery(
+  mode: SolicitacaoMode,
+  size: number,
+  from: number,
+  dateStart?: string,
+  dateEnd?: string,
+  codigoCentralReguladora?: string[],
+  selectedFields?: string[],
+  procedimentoSearch?: string
+): Record<string, unknown> {
+  const defaultFields = DEFAULT_FIELDS_SOLICITACAO;
+
+  // Solicitação só tem modo "fila"
+  const modeFields = defaultFields.fila;
+  
+  const fieldsToReturn = selectedFields && selectedFields.length > 0 
+    ? selectedFields 
+    : [...defaultFields.common, ...modeFields];
+
+  // Base query structure
+  const query: Record<string, unknown> = {
+    size: Math.min(size, 1000), // Limit to 1000 max
+    from,
+    _source: fieldsToReturn,
+    sort: [{ data_solicitacao: { order: "desc" } }], // Sempre ordena por data de solicitação
+  };
+
+  // Build must clauses
+  const mustClauses: Record<string, unknown>[] = [];
+
+  // Add date range (sempre usa data_solicitacao para fila)
+  if (dateStart && dateEnd) {
+    mustClauses.push({
+      range: {
+        data_solicitacao: {
+          gte: dateStart,
+          lte: dateEnd,
+        },
+      },
+    });
+  }
+
+  // Add optional filter by central reguladora
+  if (codigoCentralReguladora && codigoCentralReguladora.length > 0) {
+    mustClauses.push({
+      terms: { codigo_central_reguladora: codigoCentralReguladora },
+    });
+  }
+
+  // Add procedimento search filter (only nome_grupo_procedimento exists in solicitacao)
+  if (procedimentoSearch && procedimentoSearch.trim()) {
+    const searchTerm = procedimentoSearch.trim().toLowerCase();
+    const shouldClauses: Array<Record<string, unknown>> = [
+      { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
+      { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
+    ];
+    
+    mustClauses.push({
+      bool: {
+        should: shouldClauses,
+        minimum_should_match: 1,
+      },
+    });
+  }
+
+  // Build final query
+  if (mustClauses.length > 0) {
+    query.query = {
+      bool: {
+        must: mustClauses,
+      },
+    };
+  }
+
+  return query;
+}
+
+/**
+ * Main query builder - delegates to specific builders
+ */
+function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknown> {
+  const { indexType, mode, size, from = 0, dateStart, dateEnd, codigoCentralReguladora, selectedFields, procedimentoSearch } = input;
+
+  if (indexType === "marcacao") {
+    return buildMarcacaoQuery(
+      mode as MarcacaoMode,
+      size,
+      from,
+      dateStart,
+      dateEnd,
+      codigoCentralReguladora,
+      selectedFields,
+      procedimentoSearch
+    );
+  } else {
+    return buildSolicitacaoQuery(
+      mode as SolicitacaoMode,
+      size,
+      from,
+      dateStart,
+      dateEnd,
+      codigoCentralReguladora,
+      selectedFields,
+      procedimentoSearch
+    );
+  }
+}
+
+/**
+ * Execute SISREG Elasticsearch query
  */
 export async function executeSisregSearch(
   credentials: SisregCredentials,
@@ -267,42 +373,46 @@ export async function executeSisregSearch(
       hits,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error 
-      ? `Erro de conexão: ${error.message}` 
-      : "Erro desconhecido ao conectar com SISREG";
-
+    console.error("[SISREG] Query error:", error);
     return {
       ok: false,
-      status: 0,
+      status: 500,
       total: 0,
       hits: [],
-      errorMessage,
+      errorMessage: error instanceof Error ? error.message : "Erro desconhecido ao consultar API",
     };
   }
 }
 
-/**
- * Test connection to SISREG API for a specific index type
- */
-export async function testSisregConnection(
-  credentials: SisregCredentials,
-  indexType: IndexType = "marcacao"
-): Promise<{ ok: boolean; message: string }> {
-  const result = await executeSisregSearch(credentials, {
-    indexType,
-    mode: "quick",
-    size: 1,
-  });
 
-  if (result.ok) {
+/**
+ * Test SISREG connection with credentials
+ */
+export async function testSisregConnection(credentials: SisregCredentials): Promise<{ ok: boolean; message: string }> {
+  try {
+    // Try a simple query with size 1 to test connection
+    const result = await executeSisregSearch(credentials, {
+      indexType: "marcacao",
+      mode: "quick",
+      size: 1,
+      from: 0,
+    });
+
+    if (result.ok) {
+      return {
+        ok: true,
+        message: "Conexão estabelecida com sucesso!",
+      };
+    } else {
+      return {
+        ok: false,
+        message: result.errorMessage || "Falha na conexão",
+      };
+    }
+  } catch (error) {
     return {
-      ok: true,
-      message: `Conexão bem sucedida! ${result.total} registros disponíveis.`,
+      ok: false,
+      message: error instanceof Error ? error.message : "Erro desconhecido",
     };
   }
-
-  return {
-    ok: false,
-    message: result.errorMessage || "Falha na conexão",
-  };
 }

@@ -5,11 +5,14 @@
 // Tipo de índice: marcação ou solicitação ambulatorial
 export type IndexType = "marcacao" | "solicitacao";
 
-export type QueryMode = "quick" | "novas" | "agendadas" | "atendidas";
+// Modos específicos para cada índice
+export type MarcacaoMode = "quick" | "novas" | "agendadas" | "atendidas";
+export type SolicitacaoMode = "fila"; // Solicitações só tem "fila"
+export type QueryMode = MarcacaoMode | SolicitacaoMode;
 
 export interface SisregQueryInput {
-  indexType: IndexType; // Novo: tipo de índice
-  mode: QueryMode;
+  indexType: IndexType;
+  mode: QueryMode; // Pode ser MarcacaoMode ou SolicitacaoMode dependendo do indexType
   size: number;
   from?: number;
   dateStart?: string;
@@ -104,8 +107,9 @@ export const DEFAULT_FIELDS_MARCACAO = {
   ],
 };
 
-// Default fields to return for each query type - SOLICITAÇÃO
+// Default fields to return for SOLICITAÇÃO (Fila)
 // Nota: descricao_interna_procedimento e descricao_sigtap_procedimento NÃO existem neste índice
+// Solicitações só tem modo "fila" (não tem novas/agendadas/atendidas)
 export const DEFAULT_FIELDS_SOLICITACAO = {
   common: [
     "codigo_solicitacao",
@@ -122,34 +126,13 @@ export const DEFAULT_FIELDS_SOLICITACAO = {
     "sigla_situacao",
     "nome_unidade_solicitante", // Estabelecimento solicitante
   ],
-  novas: [
+  fila: [
     "data_solicitacao",
     "codigo_central_reguladora",
     "nome_central_reguladora",
     "codigo_unidade_solicitante",
     "nome_unidade_solicitante",
     "nome_medico_solicitante",
-  ],
-  agendadas: [
-    "data_solicitacao",
-    "data_aprovacao",
-    "data_marcacao",
-    "codigo_central_reguladora",
-    "nome_central_reguladora",
-    "codigo_unidade_executante",
-    "nome_unidade_executante",
-    "nome_profissional_executante",
-  ],
-  atendidas: [
-    "data_solicitacao",
-    "data_aprovacao",
-    "data_confirmacao",
-    "data_marcacao",
-    "codigo_central_reguladora",
-    "nome_central_reguladora",
-    "codigo_unidade_executante",
-    "nome_unidade_executante",
-    "nome_profissional_executante",
   ],
 };
 
