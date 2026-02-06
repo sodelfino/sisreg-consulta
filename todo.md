@@ -96,3 +96,42 @@
 - [x] Coluna "Tempo de Espera" calculada no frontend com date-fns
 - [x] Cores personalizadas: verde (até 30d), amarelo (até 90d), laranja (até 120d), vermelho (180d+)
 - [x] Formato: "X dias" ou "X meses, Y dias"
+
+
+## HU Dashboard v3.0 - Melhorias Completas
+
+### RB01 - Divisão obrigatória por módulo
+- [x] Menu "Solicitações Ambulatoriais (Fila)" aponta para endpoint correto
+- [x] Menu "Marcações Ambulatoriais" aponta para endpoint correto com abas Novas/Agendadas/Atendidas
+- [x] Sem filtros de Agendadas/Atendidas em Solicitações
+
+### RB02 - Contratos de dados independentes
+- [x] buildQuerySolicitacaoAmbulatorial() nunca referencia campos de marcação
+- [x] buildQueryMarcacaoAmbulatorial() aplica datas corretas por aba
+
+### RB03 - Montagem de dados (construtor de consulta)
+- [x] Filtros: período, central reguladora, procedimento, risco, situação/status
+- [x] Seleção de colunas exibidas (Gestão/Operacional/Auditoria)
+- [x] Filtros aplicados visíveis/resumidos no topo da tabela
+
+### RB04 - Insights automáticos (obrigatório)
+- [x] Insights gerados automaticamente após cada busca com resultados
+- [x] Total de registros e distribuição por situação/status
+- [x] Top 10 procedimentos e top unidades
+- [x] Classificação de risco (distribuição)
+- [x] Alertas automáticos (concentração, pico, etc.)
+
+### CA06 - Exportação XLSX completa
+- [x] Exportar TODOS os registros do filtro (não apenas a página)
+- [x] Aba "Dados" com colunas selecionadas
+- [x] Aba "Filtros" com parâmetros usados
+
+### RNF
+- [x] Não travar UI durante export (backend streaming)
+- [x] Timeout e mensagens amigáveis de erro
+- [x] Consistência de datas (end-exclusive)
+
+### Testes
+- [x] Testes unitários: builders separados
+- [x] Testes unitários: rota de busca
+- [x] Testes unitários: exportação

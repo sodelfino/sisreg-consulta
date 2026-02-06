@@ -207,6 +207,49 @@ export default function Consulta() {
     });
   };
 
+  // Export XLSX via backend
+  const exportXlsxMutation = trpc.search.exportXlsx.useMutation({
+    onSuccess: (data) => {
+      if (data.ok && data.data) {
+        const byteCharacters = atob(data.data.base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = data.data.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success(`Excel exportado: ${data.data.totalExported.toLocaleString("pt-BR")} de ${data.data.totalAvailable.toLocaleString("pt-BR")} registros`);
+      } else {
+        toast.error(data.error || "Erro ao exportar");
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handleExportXlsx = () => {
+    if (!configQuery.data) return;
+    exportXlsxMutation.mutate({
+      indexType,
+      mode,
+      size,
+      from: 0,
+      dateStart: dateStart || undefined,
+      dateEnd: dateEnd || undefined,
+      procedimentoSearch: procedimentoSearch.trim() || undefined,
+      exportAllPages: true,
+    });
+  };
+
   // Export to CSV
   const handleExportCSV = () => {
     if (!results?.hits || results.hits.length === 0) {
@@ -787,18 +830,58 @@ export default function Consulta() {
                     ) : (
                       <Sparkles className="mr-2 h-4 w-4" />
                     )}
-                    Gerar Insights
+                    Insights IA
                   </Button>
                   <Button
                     variant="outline"
+                    size="sm"
+                    onClick={handleExportXlsx}
+                    disabled={exportXlsxMutation.isPending || !results.hits.length}
+                  >
+                    {exportXlsxMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    Excel (XLSX)
+                  </Button>
+                  <Button
+                    variant="ghost"
                     size="sm"
                     onClick={handleExportCSV}
                     disabled={!results.hits.length}
                   >
                     <Download className="mr-2 h-4 w-4" />
-                    Exportar CSV
+                    CSV
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {/* Active Filters Summary */}
+            {results?.ok && (
+              <div className="flex flex-wrap gap-1">
+                <Badge variant="secondary" className="text-xs">
+                  {INDEX_LABELS[indexType]}
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  Modo: {mode === "fila" ? "Fila" : mode === "quick" ? "Rápida" : mode}
+                </Badge>
+                {dateStart && dateEnd && (
+                  <Badge variant="secondary" className="text-xs">
+                    Período: {dateStart} a {dateEnd}
+                  </Badge>
+                )}
+                {procedimentoSearch && (
+                  <Badge variant="secondary" className="text-xs">
+                    Procedimento: {procedimentoSearch}
+                  </Badge>
+                )}
+                {selectedFields.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {selectedFields.length} campos selecionados
+                  </Badge>
+                )}
               </div>
             )}
 

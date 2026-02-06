@@ -20,6 +20,8 @@ export interface SisregQueryInput {
   codigoCentralReguladora?: string[];
   selectedFields?: string[];
   procedimentoSearch?: string;
+  riscoFilter?: string[];
+  situacaoFilter?: string[];
 }
 
 export interface SisregQueryResult {

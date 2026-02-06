@@ -18,9 +18,25 @@ import {
 import { executeSisregSearch, testSisregConnection } from "./sisreg";
 import { IndexType, QueryMode } from "../shared/sisreg";
 import { invokeLLM } from "./_core/llm";
+import * as XLSX from "xlsx";
 
 const indexTypeSchema = z.enum(["marcacao", "solicitacao"]);
 const queryModeSchema = z.enum(["quick", "novas", "agendadas", "atendidas", "fila"]);
+
+// Shared search input schema
+const searchInputSchema = z.object({
+  indexType: indexTypeSchema.default("marcacao"),
+  mode: queryModeSchema,
+  size: z.number().min(1).max(10000).default(100),
+  from: z.number().min(0).default(0),
+  dateStart: z.string().optional(),
+  dateEnd: z.string().optional(),
+  codigoCentralReguladora: z.array(z.string()).optional(),
+  selectedFields: z.array(z.string()).optional(),
+  procedimentoSearch: z.string().optional(),
+  riscoFilter: z.array(z.string()).optional(),
+  situacaoFilter: z.array(z.string()).optional(),
+});
 
 export const appRouter = router({
   system: systemRouter,
@@ -39,8 +55,6 @@ export const appRouter = router({
     get: protectedProcedure.query(async ({ ctx }) => {
       const config = await getSisregConfig(ctx.user.id);
       if (!config) return null;
-      
-      // Return config without password
       return {
         baseUrl: config.baseUrl,
         username: config.username,
@@ -68,12 +82,11 @@ export const appRouter = router({
       .input(z.object({
         indexType: indexTypeSchema.default("marcacao"),
       }).optional())
-      .mutation(async ({ ctx, input }) => {
+      .mutation(async ({ ctx }) => {
         const config = await getSisregConfig(ctx.user.id);
         if (!config) {
           return { ok: false, message: "Configuração não encontrada. Configure suas credenciais primeiro." };
         }
-
         const password = decryptPassword(config.encryptedPassword);
         return testSisregConnection({
           baseUrl: config.baseUrl,
@@ -86,17 +99,7 @@ export const appRouter = router({
   // SISREG Search
   search: router({
     execute: protectedProcedure
-      .input(z.object({
-        indexType: indexTypeSchema.default("marcacao"),
-        mode: queryModeSchema,
-        size: z.number().min(1).max(1000).default(100),
-        from: z.number().min(0).default(0),
-        dateStart: z.string().optional(),
-        dateEnd: z.string().optional(),
-        codigoCentralReguladora: z.array(z.string()).optional(),
-        selectedFields: z.array(z.string()).optional(),
-        procedimentoSearch: z.string().optional(),
-      }))
+      .input(searchInputSchema)
       .mutation(async ({ ctx, input }) => {
         const config = await getSisregConfig(ctx.user.id);
         if (!config) {
@@ -112,12 +115,20 @@ export const appRouter = router({
         const password = decryptPassword(config.encryptedPassword);
         
         const result = await executeSisregSearch(
+          { baseUrl: config.baseUrl, username: config.username, password },
           {
-            baseUrl: config.baseUrl,
-            username: config.username,
-            password,
-          },
-          input
+            indexType: input.indexType,
+            mode: input.mode,
+            size: Math.min(input.size, 1000),
+            from: input.from,
+            dateStart: input.dateStart,
+            dateEnd: input.dateEnd,
+            codigoCentralReguladora: input.codigoCentralReguladora,
+            selectedFields: input.selectedFields,
+            procedimentoSearch: input.procedimentoSearch,
+            riscoFilter: input.riscoFilter,
+            situacaoFilter: input.situacaoFilter,
+          }
         );
 
         // Log the query (without credentials)
@@ -136,6 +147,162 @@ export const appRouter = router({
         });
 
         return result;
+      }),
+
+    // Export XLSX - fetches ALL records from the filter (not just one page)
+    exportXlsx: protectedProcedure
+      .input(searchInputSchema.extend({
+        exportAllPages: z.boolean().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config = await getSisregConfig(ctx.user.id);
+        if (!config) {
+          return { ok: false, error: "Configuração não encontrada.", data: null };
+        }
+
+        const password = decryptPassword(config.encryptedPassword);
+        const credentials = { baseUrl: config.baseUrl, username: config.username, password };
+
+        // Fetch all records via pagination
+        const allHits: Record<string, unknown>[] = [];
+        let totalRecords = 0;
+        const batchSize = 1000;
+        let currentFrom = 0;
+        const maxRecords = 10000; // Safety limit
+
+        if (input.exportAllPages) {
+          // First request to get total
+          const firstResult = await executeSisregSearch(credentials, {
+            ...input,
+            size: batchSize,
+            from: 0,
+          });
+
+          if (!firstResult.ok) {
+            return { ok: false, error: firstResult.errorMessage || "Erro na consulta.", data: null };
+          }
+
+          totalRecords = firstResult.total;
+          allHits.push(...firstResult.hits);
+          currentFrom = batchSize;
+
+          // Fetch remaining pages
+          while (currentFrom < Math.min(totalRecords, maxRecords) && allHits.length < maxRecords) {
+            const pageResult = await executeSisregSearch(credentials, {
+              ...input,
+              size: batchSize,
+              from: currentFrom,
+            });
+            if (!pageResult.ok || pageResult.hits.length === 0) break;
+            allHits.push(...pageResult.hits);
+            currentFrom += batchSize;
+          }
+        } else {
+          const result = await executeSisregSearch(credentials, input);
+          if (!result.ok) {
+            return { ok: false, error: result.errorMessage || "Erro na consulta.", data: null };
+          }
+          allHits.push(...result.hits);
+          totalRecords = result.total;
+        }
+
+        // Build XLSX with multiple sheets
+        const wb = XLSX.utils.book_new();
+
+        // Sheet 1: "Dados" - all records
+        if (allHits.length > 0) {
+          // Get all unique keys from hits
+          const allKeys = new Set<string>();
+          for (const hit of allHits) {
+            Object.keys(hit).forEach(k => allKeys.add(k));
+          }
+          const headers = Array.from(allKeys).sort();
+          
+          const wsData = [headers];
+          for (const hit of allHits) {
+            wsData.push(headers.map(h => {
+              const val = hit[h];
+              return val === null || val === undefined ? "" : String(val);
+            }));
+          }
+          const ws = XLSX.utils.aoa_to_sheet(wsData);
+          XLSX.utils.book_append_sheet(wb, ws, "Dados");
+        }
+
+        // Sheet 2: "Filtros" - parameters used
+        const filtrosData = [
+          ["Parâmetro", "Valor"],
+          ["Tipo de Índice", input.indexType === "marcacao" ? "Marcações Ambulatoriais" : "Solicitações Ambulatoriais"],
+          ["Modo", input.mode],
+          ["Data Início", input.dateStart || "Não informado"],
+          ["Data Fim", input.dateEnd || "Não informado"],
+          ["Busca Procedimento", input.procedimentoSearch || "Nenhum"],
+          ["Filtro Risco", input.riscoFilter?.join(", ") || "Todos"],
+          ["Filtro Situação", input.situacaoFilter?.join(", ") || "Todos"],
+          ["Central Reguladora", input.codigoCentralReguladora?.join(", ") || "Padrão"],
+          ["Total de Registros", String(totalRecords)],
+          ["Registros Exportados", String(allHits.length)],
+          ["Data da Exportação", new Date().toLocaleString("pt-BR")],
+        ];
+        const wsFiltros = XLSX.utils.aoa_to_sheet(filtrosData);
+        XLSX.utils.book_append_sheet(wb, wsFiltros, "Filtros");
+
+        // Sheet 3: "Resumo" - aggregations
+        if (allHits.length > 0) {
+          const statusField = input.indexType === "solicitacao" ? "sigla_situacao" : "status_solicitacao";
+          const unidadeField = input.indexType === "solicitacao" ? "nome_unidade_solicitante" : "nome_unidade_executante";
+          
+          const byStatus: Record<string, number> = {};
+          const byUnidade: Record<string, number> = {};
+          const byProcedimento: Record<string, number> = {};
+          const byRisco: Record<string, number> = {};
+
+          for (const hit of allHits) {
+            const status = String(hit[statusField] || "N/A");
+            byStatus[status] = (byStatus[status] || 0) + 1;
+
+            const unidade = String(hit[unidadeField] || "N/A");
+            if (unidade !== "N/A") byUnidade[unidade] = (byUnidade[unidade] || 0) + 1;
+
+            const proc = String(hit.descricao_interna_procedimento || hit.nome_grupo_procedimento || "N/A");
+            if (proc !== "N/A") byProcedimento[proc] = (byProcedimento[proc] || 0) + 1;
+
+            const risco = String(hit.codigo_classificacao_risco || "N/A");
+            byRisco[risco] = (byRisco[risco] || 0) + 1;
+          }
+
+          const resumoData: (string | number)[][] = [["Categoria", "Item", "Quantidade", "Percentual"]];
+          
+          const addSection = (category: string, data: Record<string, number>) => {
+            const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]);
+            const total = sorted.reduce((sum, [, v]) => sum + v, 0);
+            for (const [name, count] of sorted) {
+              resumoData.push([category, name, count, `${((count / total) * 100).toFixed(1)}%`]);
+            }
+          };
+
+          addSection("Status", byStatus);
+          addSection("Unidade", byUnidade);
+          addSection("Procedimento", byProcedimento);
+          addSection("Risco", byRisco);
+
+          const wsResumo = XLSX.utils.aoa_to_sheet(resumoData);
+          XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+        }
+
+        // Convert to base64
+        const xlsxBuffer = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+
+        return {
+          ok: true,
+          error: null,
+          data: {
+            base64: xlsxBuffer,
+            filename: `sisreg_${input.indexType}_${input.mode}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+            totalExported: allHits.length,
+            totalAvailable: totalRecords,
+          },
+        };
       }),
 
     logs: protectedProcedure
@@ -179,7 +346,6 @@ export const appRouter = router({
         if (input.name) updateData.name = input.name;
         if (input.fields) updateData.fields = input.fields;
         if (input.isDefault !== undefined) updateData.isDefault = input.isDefault ? 1 : 0;
-        
         await updateFieldSelection(input.id, ctx.user.id, updateData);
         return { success: true };
       }),
@@ -201,55 +367,72 @@ export const appRouter = router({
         dateStart: z.string().optional(),
         dateEnd: z.string().optional(),
         procedimentoFilter: z.array(z.string()).optional(),
+        riscoFilter: z.array(z.string()).optional(),
+        situacaoFilter: z.array(z.string()).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const config = await getSisregConfig(ctx.user.id);
         if (!config) {
-          return {
-            ok: false,
-            error: "Configuração não encontrada.",
-            data: null,
-          };
+          return { ok: false, error: "Configuração não encontrada.", data: null };
         }
 
         const password = decryptPassword(config.encryptedPassword);
         
-        // Fetch a larger dataset for aggregation
-        const result = await executeSisregSearch(
-          {
-            baseUrl: config.baseUrl,
-            username: config.username,
-            password,
-          },
-          {
+        // Fetch dataset for aggregation (up to 10000 via pagination)
+        const credentials = { baseUrl: config.baseUrl, username: config.username, password };
+        const allHits: Record<string, unknown>[] = [];
+        let totalRecords = 0;
+        const batchSize = 1000;
+        let currentFrom = 0;
+
+        const firstResult = await executeSisregSearch(credentials, {
+          indexType: input.indexType,
+          mode: input.mode,
+          size: batchSize,
+          from: 0,
+          dateStart: input.dateStart,
+          dateEnd: input.dateEnd,
+          riscoFilter: input.riscoFilter,
+          situacaoFilter: input.situacaoFilter,
+        });
+
+        if (!firstResult.ok) {
+          return { ok: false, error: firstResult.errorMessage || "Erro na consulta.", data: null };
+        }
+
+        totalRecords = firstResult.total;
+        allHits.push(...firstResult.hits);
+        currentFrom = batchSize;
+
+        // Fetch up to 5000 for dashboard aggregation
+        while (currentFrom < Math.min(totalRecords, 5000) && allHits.length < 5000) {
+          const pageResult = await executeSisregSearch(credentials, {
             indexType: input.indexType,
             mode: input.mode,
-            size: 1000,
-            from: 0,
+            size: batchSize,
+            from: currentFrom,
             dateStart: input.dateStart,
             dateEnd: input.dateEnd,
-          }
-        );
-
-        if (!result.ok) {
-          return {
-            ok: false,
-            error: result.errorMessage || "Erro na consulta.",
-            data: null,
-          };
+            riscoFilter: input.riscoFilter,
+            situacaoFilter: input.situacaoFilter,
+          });
+          if (!pageResult.ok || pageResult.hits.length === 0) break;
+          allHits.push(...pageResult.hits);
+          currentFrom += batchSize;
         }
 
         // Filter by procedimento if specified
-        let filteredHits = result.hits;
+        let filteredHits = allHits;
         if (input.procedimentoFilter && input.procedimentoFilter.length > 0) {
-          filteredHits = result.hits.filter((hit) => {
+          filteredHits = allHits.filter((hit) => {
             const proc = String(hit.descricao_interna_procedimento || hit.nome_grupo_procedimento || "");
             return input.procedimentoFilter!.some(f => proc.toLowerCase().includes(f.toLowerCase()));
           });
         }
 
-        // Aggregate by unidade
+        // Aggregate
         const unidadeField = input.indexType === "solicitacao" ? "nome_unidade_solicitante" : "nome_unidade_executante";
+        const statusField = input.indexType === "solicitacao" ? "sigla_situacao" : "status_solicitacao";
         const byUnidade: Record<string, number> = {};
         const byProcedimento: Record<string, number> = {};
         const byRisco: Record<string, number> = {};
@@ -257,28 +440,61 @@ export const appRouter = router({
         const allProcedimentos: Set<string> = new Set();
 
         for (const hit of filteredHits) {
-          // By unidade
           const unidade = String(hit[unidadeField] || "N/A");
-          if (unidade !== "N/A") {
-            byUnidade[unidade] = (byUnidade[unidade] || 0) + 1;
-          }
+          if (unidade !== "N/A") byUnidade[unidade] = (byUnidade[unidade] || 0) + 1;
 
-          // By procedimento
           const proc = String(hit.descricao_interna_procedimento || hit.nome_grupo_procedimento || "N/A");
           if (proc !== "N/A") {
             byProcedimento[proc] = (byProcedimento[proc] || 0) + 1;
             allProcedimentos.add(proc);
           }
 
-          // By risco
           const risco = String(hit.codigo_classificacao_risco || "N/A");
           byRisco[risco] = (byRisco[risco] || 0) + 1;
 
-          // By status (marcação usa status_solicitacao, solicitação usa sigla_situacao)
-          const status = input.indexType === "solicitacao" 
-            ? String(hit.sigla_situacao || "N/A")
-            : String(hit.status_solicitacao || hit.sigla_situacao || "N/A");
+          const status = String(hit[statusField] || hit.sigla_situacao || "N/A");
           byStatus[status] = (byStatus[status] || 0) + 1;
+        }
+
+        // Generate auto-insights
+        const insightsList: string[] = [];
+        
+        // Total
+        insightsList.push(`**Total de registros:** ${filteredHits.length.toLocaleString("pt-BR")} de ${totalRecords.toLocaleString("pt-BR")} disponíveis`);
+
+        // Top unidade
+        const topUnidades = Object.entries(byUnidade).sort((a, b) => b[1] - a[1]);
+        if (topUnidades.length > 0) {
+          const topPct = ((topUnidades[0][1] / filteredHits.length) * 100).toFixed(1);
+          insightsList.push(`**Unidade com mais registros:** ${topUnidades[0][0]} (${topUnidades[0][1]} — ${topPct}%)`);
+          
+          // Alert: concentration
+          if (Number(topPct) > 40) {
+            insightsList.push(`⚠️ **Alerta de concentração:** ${topUnidades[0][0]} concentra ${topPct}% dos registros`);
+          }
+        }
+
+        // Top procedimento
+        const topProcs = Object.entries(byProcedimento).sort((a, b) => b[1] - a[1]);
+        if (topProcs.length > 0) {
+          insightsList.push(`**Procedimento mais frequente:** ${topProcs[0][0]} (${topProcs[0][1]} registros)`);
+        }
+
+        // Risk distribution
+        const totalRisco = Object.values(byRisco).reduce((s, v) => s + v, 0);
+        const riscoAlto = (byRisco["0"] || 0) + (byRisco["1"] || 0);
+        if (riscoAlto > 0) {
+          const pctAlto = ((riscoAlto / totalRisco) * 100).toFixed(1);
+          insightsList.push(`**Risco alto (Emergência + Urgência):** ${riscoAlto} registros (${pctAlto}%)`);
+          if (Number(pctAlto) > 30) {
+            insightsList.push(`⚠️ **Alerta:** ${pctAlto}% dos registros são de risco alto — pode indicar gargalo na regulação`);
+          }
+        }
+
+        // Status distribution insight
+        const topStatus = Object.entries(byStatus).sort((a, b) => b[1] - a[1]);
+        if (topStatus.length > 0) {
+          insightsList.push(`**Status predominante:** ${topStatus[0][0]} (${topStatus[0][1]} — ${((topStatus[0][1] / filteredHits.length) * 100).toFixed(1)}%)`);
         }
 
         return {
@@ -286,23 +502,13 @@ export const appRouter = router({
           error: null,
           data: {
             total: filteredHits.length,
-            totalUnfiltered: result.total,
-            byUnidade: Object.entries(byUnidade)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 15)
-              .map(([name, value]) => ({ name, value })),
-            byProcedimento: Object.entries(byProcedimento)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 15)
-              .map(([name, value]) => ({ name, value })),
-            byRisco: Object.entries(byRisco)
-              .sort((a, b) => b[1] - a[1])
-              .map(([name, value]) => ({ name, value })),
-            byStatus: Object.entries(byStatus)
-              .sort((a, b) => b[1] - a[1])
-              .map(([name, value]) => ({ name, value })),
+            totalUnfiltered: totalRecords,
+            byUnidade: topUnidades.slice(0, 15).map(([name, value]) => ({ name, value })),
+            byProcedimento: topProcs.slice(0, 15).map(([name, value]) => ({ name, value })),
+            byRisco: Object.entries(byRisco).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value })),
+            byStatus: topStatus.map(([name, value]) => ({ name, value })),
             allProcedimentos: Array.from(allProcedimentos).sort(),
-            rawData: filteredHits,
+            autoInsights: insightsList,
           },
         };
       }),
@@ -320,14 +526,9 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         if (input.data.length === 0) {
-          return {
-            ok: false,
-            insights: "",
-            error: "Nenhum dado para análise.",
-          };
+          return { ok: false, insights: "", error: "Nenhum dado para análise." };
         }
 
-        // Prepare summary statistics
         const total = input.data.length;
         const statusCounts: Record<string, number> = {};
         const unidadeCounts: Record<string, number> = {};
@@ -335,32 +536,23 @@ export const appRouter = router({
         const riskCounts: Record<string, number> = {};
 
         for (const item of input.data) {
-          // Count by status
           const status = String(item.status_solicitacao || item.sigla_situacao || "N/A");
           statusCounts[status] = (statusCounts[status] || 0) + 1;
 
-          // Count by unidade
           const unidade = String(item.nome_unidade_executante || item.nome_unidade_solicitante || "N/A");
-          if (unidade !== "N/A") {
-            unidadeCounts[unidade] = (unidadeCounts[unidade] || 0) + 1;
-          }
+          if (unidade !== "N/A") unidadeCounts[unidade] = (unidadeCounts[unidade] || 0) + 1;
 
-          // Count by procedimento
           const proc = String(item.descricao_interna_procedimento || item.nome_grupo_procedimento || "N/A");
-          if (proc !== "N/A") {
-            procedimentoCounts[proc] = (procedimentoCounts[proc] || 0) + 1;
-          }
+          if (proc !== "N/A") procedimentoCounts[proc] = (procedimentoCounts[proc] || 0) + 1;
 
-          // Count by risk
           const risk = String(item.codigo_classificacao_risco || "N/A");
           riskCounts[risk] = (riskCounts[risk] || 0) + 1;
         }
 
-        const indexLabel = input.indexType === "solicitacao" ? "solicitação ambulatorial" : "marcação ambulatorial";
+        const indexLabel = input.indexType === "solicitacao" ? "solicitação ambulatorial (fila)" : "marcação ambulatorial";
 
-        // Build context for LLM
         const context = `
-Análise de dados de ${indexLabel} do SISREG (Sistema de Regulação).
+Análise de dados de ${indexLabel} do SISREG (Sistema de Regulação) - Macaé/RJ.
 Tipo de consulta: ${input.queryMode}
 Período: ${input.dateStart || "N/A"} a ${input.dateEnd || "N/A"}
 Total de registros: ${total}
@@ -368,11 +560,11 @@ Total de registros: ${total}
 Distribuição por Status:
 ${Object.entries(statusCounts).map(([k, v]) => `- ${k}: ${v} (${((v/total)*100).toFixed(1)}%)`).join("\n")}
 
-Top 5 Unidades:
-${Object.entries(unidadeCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
+Top 10 Unidades:
+${Object.entries(unidadeCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
 
-Top 5 Procedimentos:
-${Object.entries(procedimentoCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
+Top 10 Procedimentos:
+${Object.entries(procedimentoCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
 
 Distribuição por Classificação de Risco:
 ${Object.entries(riskCounts).map(([k, v]) => `- Risco ${k}: ${v} (${((v/total)*100).toFixed(1)}%)`).join("\n")}
@@ -403,18 +595,10 @@ Seja conciso mas informativo. Use formatação markdown para melhor legibilidade
           const content = response.choices?.[0]?.message?.content;
           const insights = typeof content === 'string' ? content : "Não foi possível gerar insights.";
 
-          return {
-            ok: true,
-            insights,
-            error: null,
-          };
+          return { ok: true, insights, error: null };
         } catch (error) {
           console.error("[LLM] Error generating insights:", error);
-          return {
-            ok: false,
-            insights: "",
-            error: "Erro ao gerar insights. Tente novamente.",
-          };
+          return { ok: false, insights: "", error: "Erro ao gerar insights. Tente novamente." };
         }
       }),
   }),

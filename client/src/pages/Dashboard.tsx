@@ -6,10 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
   AlertCircle,
@@ -22,12 +22,12 @@ import {
   FileSpreadsheet,
   FileText,
   Filter,
+  Lightbulb,
   Loader2,
   PieChart,
   RefreshCw,
   Settings,
   TrendingUp,
-  X,
   Zap,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
@@ -45,8 +45,8 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import * as XLSX from "xlsx";
 import { RISK_LABELS, INDEX_LABELS, type QueryMode, type IndexType } from "../../../shared/sisreg";
+import { Streamdown } from "streamdown";
 
 // Colors for charts
 const COLORS = [
@@ -56,12 +56,12 @@ const COLORS = [
 ];
 
 const RISK_COLORS: Record<string, string> = {
-  "0": "#6B7280", // Cinza - Não classificado
-  "1": "#EF4444", // Vermelho - Emergência
-  "2": "#F97316", // Laranja - Muito urgente
-  "3": "#EAB308", // Amarelo - Urgente
-  "4": "#22C55E", // Verde - Pouco urgente
-  "5": "#3B82F6", // Azul - Não urgente
+  "0": "#6B7280",
+  "1": "#EF4444",
+  "2": "#F97316",
+  "3": "#EAB308",
+  "4": "#22C55E",
+  "5": "#3B82F6",
 };
 
 export default function Dashboard() {
@@ -69,8 +69,14 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
 
   // Filter state
-  const [indexType, setIndexType] = useState<IndexType>("marcacao");
-  const [mode, setMode] = useState<QueryMode>("quick");
+  const [indexType, setIndexType] = useState<IndexType>("solicitacao");
+  const [mode, setMode] = useState<QueryMode>("fila");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [selectedProcedimentos, setSelectedProcedimentos] = useState<string[]>([]);
+  const [showProcedimentoFilter, setShowProcedimentoFilter] = useState(false);
+  const [procedimentoSearch, setProcedimentoSearch] = useState("");
+  const [showLlmInsights, setShowLlmInsights] = useState(false);
 
   // Mudar modo quando indexType mudar
   useEffect(() => {
@@ -80,11 +86,6 @@ export default function Dashboard() {
       setMode("quick");
     }
   }, [indexType]);
-  const [dateStart, setDateStart] = useState("");
-  const [dateEnd, setDateEnd] = useState("");
-  const [selectedProcedimentos, setSelectedProcedimentos] = useState<string[]>([]);
-  const [showProcedimentoFilter, setShowProcedimentoFilter] = useState(false);
-  const [procedimentoSearch, setProcedimentoSearch] = useState("");
 
   // Check config
   const configQuery = trpc.config.get.useQuery(undefined, {
@@ -95,9 +96,53 @@ export default function Dashboard() {
   const aggregateMutation = trpc.dashboard.aggregate.useMutation({
     onSuccess: (data) => {
       if (data.ok) {
-        toast.success(`Dashboard atualizado com ${data.data?.total} registros`);
+        toast.success(`Dashboard atualizado com ${data.data?.total.toLocaleString("pt-BR")} registros`);
       } else {
         toast.error(data.error || "Erro ao carregar dados");
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // XLSX export mutation
+  const exportMutation = trpc.search.exportXlsx.useMutation({
+    onSuccess: (data) => {
+      if (data.ok && data.data) {
+        // Download the XLSX file from base64
+        const byteCharacters = atob(data.data.base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = data.data.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success(`Excel exportado: ${data.data.totalExported.toLocaleString("pt-BR")} registros`);
+      } else {
+        toast.error(data.error || "Erro ao exportar");
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // LLM insights mutation
+  const insightsMutation = trpc.insights.generate.useMutation({
+    onSuccess: (data) => {
+      if (data.ok) {
+        setShowLlmInsights(true);
+      } else {
+        toast.error(data.error || "Erro ao gerar insights");
       }
     },
     onError: (error) => {
@@ -113,17 +158,71 @@ export default function Dashboard() {
       return;
     }
 
-    if (mode !== "quick" && (!dateStart || !dateEnd)) {
+    if (mode !== "quick" && mode !== "fila" && (!dateStart || !dateEnd)) {
       toast.error("Selecione o período de datas");
       return;
     }
 
+    setShowLlmInsights(false);
     aggregateMutation.mutate({
       indexType,
       mode,
       dateStart: dateStart || undefined,
       dateEnd: dateEnd || undefined,
       procedimentoFilter: selectedProcedimentos.length > 0 ? selectedProcedimentos : undefined,
+    });
+  };
+
+  // Export XLSX via backend
+  const handleExportExcel = () => {
+    if (!configQuery.data) return;
+
+    exportMutation.mutate({
+      indexType,
+      mode,
+      size: 1000,
+      from: 0,
+      dateStart: dateStart || undefined,
+      dateEnd: dateEnd || undefined,
+      procedimentoSearch: selectedProcedimentos.length > 0 ? selectedProcedimentos[0] : undefined,
+      exportAllPages: true,
+    });
+  };
+
+  // Generate LLM insights
+  const handleGenerateLlmInsights = () => {
+    if (!dashboardData) return;
+
+    // Build a summary dataset for LLM
+    const summaryData = [
+      ...dashboardData.byUnidade.map(u => ({
+        tipo: "unidade",
+        nome: u.name,
+        quantidade: u.value,
+      })),
+      ...dashboardData.byProcedimento.map(p => ({
+        tipo: "procedimento",
+        nome: p.name,
+        quantidade: p.value,
+      })),
+      ...dashboardData.byRisco.map(r => ({
+        tipo: "risco",
+        nome: RISK_LABELS[Number(r.name)] || r.name,
+        quantidade: r.value,
+      })),
+      ...dashboardData.byStatus.map(s => ({
+        tipo: "status",
+        nome: s.name,
+        quantidade: s.value,
+      })),
+    ];
+
+    insightsMutation.mutate({
+      data: summaryData,
+      queryMode: mode,
+      indexType,
+      dateStart: dateStart || undefined,
+      dateEnd: dateEnd || undefined,
     });
   };
 
@@ -143,59 +242,16 @@ export default function Dashboard() {
     );
   };
 
-  // Export to Excel
-  const handleExportExcel = () => {
-    const data = aggregateMutation.data?.data;
-    if (!data?.rawData || data.rawData.length === 0) {
-      toast.error("Nenhum dado para exportar");
-      return;
-    }
-
-    // Create workbook
-    const wb = XLSX.utils.book_new();
-
-    // Sheet 1: Raw data
-    const rawDataSheet = XLSX.utils.json_to_sheet(data.rawData);
-    XLSX.utils.book_append_sheet(wb, rawDataSheet, "Dados");
-
-    // Sheet 2: By Unidade
-    const unidadeSheet = XLSX.utils.json_to_sheet(data.byUnidade.map(u => ({
-      Unidade: u.name,
-      Quantidade: u.value,
-      Percentual: ((u.value / data.total) * 100).toFixed(1) + "%",
-    })));
-    XLSX.utils.book_append_sheet(wb, unidadeSheet, "Por Unidade");
-
-    // Sheet 3: By Procedimento
-    const procSheet = XLSX.utils.json_to_sheet(data.byProcedimento.map(p => ({
-      Procedimento: p.name,
-      Quantidade: p.value,
-      Percentual: ((p.value / data.total) * 100).toFixed(1) + "%",
-    })));
-    XLSX.utils.book_append_sheet(wb, procSheet, "Por Procedimento");
-
-    // Sheet 4: By Risco
-    const riscoSheet = XLSX.utils.json_to_sheet(data.byRisco.map(r => ({
-      Classificação: RISK_LABELS[Number(r.name)] || r.name,
-      Quantidade: r.value,
-      Percentual: ((r.value / data.total) * 100).toFixed(1) + "%",
-    })));
-    XLSX.utils.book_append_sheet(wb, riscoSheet, "Por Risco");
-
-    // Sheet 5: By Status
-    const statusSheet = XLSX.utils.json_to_sheet(data.byStatus.map(s => ({
-      Status: s.name,
-      Quantidade: s.value,
-      Percentual: ((s.value / data.total) * 100).toFixed(1) + "%",
-    })));
-    XLSX.utils.book_append_sheet(wb, statusSheet, "Por Status");
-
-    // Generate filename
-    const filename = `sisreg_dashboard_${indexType}_${mode}_${new Date().toISOString().split("T")[0]}.xlsx`;
-
-    // Save file
-    XLSX.writeFile(wb, filename);
-    toast.success("Excel exportado com sucesso!");
+  // Apply procedimento filter
+  const handleApplyProcedimentoFilter = () => {
+    if (!configQuery.data) return;
+    aggregateMutation.mutate({
+      indexType,
+      mode,
+      dateStart: dateStart || undefined,
+      dateEnd: dateEnd || undefined,
+      procedimentoFilter: selectedProcedimentos.length > 0 ? selectedProcedimentos : undefined,
+    });
   };
 
   // Format risk label
@@ -224,9 +280,7 @@ export default function Dashboard() {
               <BarChart3 className="h-6 w-6 text-primary" />
             </div>
             <CardTitle>Acesso Restrito</CardTitle>
-            <CardDescription>
-              Faça login para acessar o dashboard
-            </CardDescription>
+            <CardDescription>Faça login para acessar o dashboard</CardDescription>
           </CardHeader>
           <CardContent>
             <a href={getLoginUrl()}>
@@ -240,248 +294,204 @@ export default function Dashboard() {
 
   const dashboardData = aggregateMutation.data?.data;
 
-  // Effect to reload dashboard when procedimento filter changes
-  const handleApplyProcedimentoFilter = () => {
-    if (!configQuery.data) return;
-    
-    aggregateMutation.mutate({
-      indexType,
-      mode,
-      dateStart: dateStart || undefined,
-      dateEnd: dateEnd || undefined,
-      procedimentoFilter: selectedProcedimentos.length > 0 ? selectedProcedimentos : undefined,
-    });
-  };
+  // Build active filters summary
+  const activeFilters: string[] = [];
+  if (indexType === "marcacao") activeFilters.push("Marcações Ambulatoriais");
+  else activeFilters.push("Solicitações Ambulatoriais (Fila)");
+  if (mode !== "quick" && mode !== "fila") activeFilters.push(`Modo: ${mode}`);
+  if (dateStart && dateEnd) activeFilters.push(`Período: ${dateStart} a ${dateEnd}`);
+  if (selectedProcedimentos.length > 0) activeFilters.push(`${selectedProcedimentos.length} procedimento(s) filtrado(s)`);
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container flex h-16 items-center justify-between">
+        <div className="container flex h-14 items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/">
-              <div className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Database className="h-5 w-5" />
+              <div className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Database className="h-4 w-4" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-semibold">SISREG Dashboard</h1>
-                  <p className="text-xs text-muted-foreground">Macaé - RJ</p>
+                  <h1 className="text-sm font-semibold leading-tight">SISREG Dashboard</h1>
+                  <p className="text-[10px] text-muted-foreground">Macaé - RJ</p>
                 </div>
               </div>
             </Link>
           </div>
-          
           <div className="flex items-center gap-2">
             <Link href="/consulta">
-              <Button variant="outline" size="sm">
-                <Database className="mr-2 h-4 w-4" />
+              <Button variant="outline" size="sm" className="h-8 text-xs">
+                <Database className="mr-1 h-3 w-3" />
                 Consulta
               </Button>
             </Link>
             <Link href="/configuracao">
-              <Button variant="outline" size="sm">
-                <Settings className="mr-2 h-4 w-4" />
-                Configurações
+              <Button variant="outline" size="sm" className="h-8 text-xs">
+                <Settings className="mr-1 h-3 w-3" />
+                Config
               </Button>
             </Link>
           </div>
         </div>
       </header>
 
-      <main className="container py-6">
+      <main className="container py-4">
         {/* Config Warning */}
         {!configQuery.data && !configQuery.isLoading && (
-          <Card className="mb-6 border-amber-500/50 bg-amber-500/5">
-            <CardContent className="flex items-center gap-4 py-4">
-              <AlertCircle className="h-5 w-5 text-amber-500" />
+          <Card className="mb-4 border-amber-500/50 bg-amber-500/5">
+            <CardContent className="flex items-center gap-3 py-3">
+              <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
               <div className="flex-1">
-                <p className="font-medium">Configuração necessária</p>
-                <p className="text-sm text-muted-foreground">
-                  Configure suas credenciais do SISREG para visualizar o dashboard
-                </p>
+                <p className="text-sm font-medium">Configure suas credenciais do SISREG</p>
               </div>
               <Link href="/configuracao">
-                <Button size="sm">Configurar</Button>
+                <Button size="sm" className="h-7 text-xs">Configurar</Button>
               </Link>
             </CardContent>
           </Card>
         )}
 
-        {/* Filters */}
-        <Card className="mb-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Filter className="h-4 w-4" />
-              Filtros do Dashboard
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        {/* Filters - Compact */}
+        <Card className="mb-4">
+          <CardContent className="pt-4 pb-3">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6 items-end">
               {/* Index Type */}
               <div className="space-y-1">
-                <Label className="text-xs">Tipo de Consulta</Label>
+                <Label className="text-xs text-muted-foreground">Tipo</Label>
                 <Select value={indexType} onValueChange={(v) => setIndexType(v as IndexType)}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="marcacao">
-                      <span className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        Marcações
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" /> Marcações
                       </span>
                     </SelectItem>
                     <SelectItem value="solicitacao">
-                      <span className="flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        Solicitações
+                      <span className="flex items-center gap-1">
+                        <FileText className="h-3 w-3" /> Solicitações (Fila)
                       </span>
                     </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Mode - modos específicos por tipo de índice */}
+              {/* Mode */}
               <div className="space-y-1">
-                <Label className="text-xs">Modo</Label>
+                <Label className="text-xs text-muted-foreground">Modo</Label>
                 {indexType === "solicitacao" ? (
-                  <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50">
-                    <span className="flex items-center gap-2 text-sm">
-                      <FileText className="h-4 w-4" />
-                      Fila de Solicitações
-                    </span>
+                  <div className="h-8 flex items-center px-2 rounded-md border bg-muted/50 text-xs">
+                    <FileText className="h-3 w-3 mr-1" /> Fila
                   </div>
                 ) : (
                   <Select value={mode} onValueChange={(v) => setMode(v as QueryMode)}>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="quick">
-                        <span className="flex items-center gap-2">
-                          <Zap className="h-4 w-4" />
-                          Rápida
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="novas">
-                        <span className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          Novas
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="agendadas">
-                        <span className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4" />
-                          Agendadas
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="atendidas">
-                        <span className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Atendidas
-                        </span>
-                      </SelectItem>
+                      <SelectItem value="quick"><span className="flex items-center gap-1"><Zap className="h-3 w-3" /> Rápida</span></SelectItem>
+                      <SelectItem value="novas"><span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Novas</span></SelectItem>
+                      <SelectItem value="agendadas"><span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> Agendadas</span></SelectItem>
+                      <SelectItem value="atendidas"><span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Atendidas</span></SelectItem>
                     </SelectContent>
                   </Select>
                 )}
               </div>
 
               {/* Date Range */}
-              {mode !== "quick" && mode !== "fila" && (
+              {mode !== "quick" && mode !== "fila" ? (
                 <>
                   <div className="space-y-1">
-                    <Label className="text-xs">Data Inicial</Label>
-                    <Input
-                      type="date"
-                      value={dateStart}
-                      onChange={(e) => setDateStart(e.target.value)}
-                      className="h-9"
-                    />
+                    <Label className="text-xs text-muted-foreground">Data Inicial</Label>
+                    <Input type="date" value={dateStart} onChange={(e) => setDateStart(e.target.value)} className="h-8 text-xs" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Data Final</Label>
-                    <Input
-                      type="date"
-                      value={dateEnd}
-                      onChange={(e) => setDateEnd(e.target.value)}
-                      className="h-9"
-                    />
+                    <Label className="text-xs text-muted-foreground">Data Final</Label>
+                    <Input type="date" value={dateEnd} onChange={(e) => setDateEnd(e.target.value)} className="h-8 text-xs" />
                   </div>
                 </>
+              ) : (
+                <div className="lg:col-span-2" />
               )}
 
               {/* Actions */}
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-1 lg:col-span-2">
                 <Button
                   onClick={handleLoadDashboard}
                   disabled={aggregateMutation.isPending || !configQuery.data}
-                  className="flex-1"
+                  className="flex-1 h-8 text-xs"
                 >
                   {aggregateMutation.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                   ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
+                    <RefreshCw className="mr-1 h-3 w-3" />
                   )}
                   Carregar
                 </Button>
+                {dashboardData && (
+                  <Button
+                    variant="outline"
+                    onClick={handleExportExcel}
+                    disabled={exportMutation.isPending}
+                    className="h-8 text-xs"
+                  >
+                    {exportMutation.isPending ? (
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Download className="mr-1 h-3 w-3" />
+                    )}
+                    XLSX
+                  </Button>
+                )}
               </div>
             </div>
 
             {/* Procedimento Filter */}
             {dashboardData && (
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-xs">Filtrar por Procedimentos</Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
+              <div className="mt-3 pt-3 border-t">
+                <div className="flex items-center justify-between">
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
                     onClick={() => setShowProcedimentoFilter(!showProcedimentoFilter)}
                   >
-                    {showProcedimentoFilter ? "Ocultar" : "Mostrar"} ({selectedProcedimentos.length} selecionados)
-                  </Button>
+                    <Filter className="h-3 w-3" />
+                    Filtrar por Procedimentos ({selectedProcedimentos.length} selecionados)
+                  </button>
+                  {selectedProcedimentos.length > 0 && (
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => setSelectedProcedimentos([])}>
+                        Limpar
+                      </Button>
+                      <Button size="sm" className="h-6 text-[10px] px-2" onClick={handleApplyProcedimentoFilter}>
+                        Aplicar
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 
                 {showProcedimentoFilter && (
-                  <div className="space-y-2">
+                  <div className="mt-2 space-y-2">
                     <Input
                       placeholder="Buscar procedimento..."
                       value={procedimentoSearch}
                       onChange={(e) => setProcedimentoSearch(e.target.value)}
-                      className="h-9"
+                      className="h-7 text-xs"
                     />
-                    <ScrollArea className="h-[200px] border rounded-md p-2">
+                    <ScrollArea className="h-[150px] border rounded-md p-1">
                       {filteredProcedimentos.map((proc) => (
                         <div
                           key={proc}
-                          className="flex items-center gap-2 py-1 cursor-pointer hover:bg-muted/50 px-2 rounded"
+                          className="flex items-center gap-2 py-0.5 cursor-pointer hover:bg-muted/50 px-2 rounded text-xs"
                           onClick={() => toggleProcedimento(proc)}
                         >
-                          <Checkbox
-                            checked={selectedProcedimentos.includes(proc)}
-                            className="pointer-events-none"
-                          />
-                          <span className="text-sm truncate">{proc}</span>
+                          <Checkbox checked={selectedProcedimentos.includes(proc)} className="pointer-events-none h-3 w-3" />
+                          <span className="truncate">{proc}</span>
                         </div>
                       ))}
                     </ScrollArea>
-                    {selectedProcedimentos.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedProcedimentos([])}
-                        >
-                          Limpar seleção
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={handleApplyProcedimentoFilter}
-                        >
-                          Aplicar filtro
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -492,100 +502,162 @@ export default function Dashboard() {
         {/* Dashboard Content */}
         {dashboardData ? (
           <>
-            {/* Summary Cards */}
-            <div className="grid gap-4 md:grid-cols-4 mb-6">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Database className="h-6 w-6 text-primary" />
+            {/* Active Filters Summary + KPIs Row */}
+            <div className="flex flex-wrap gap-1 mb-3">
+              {activeFilters.map((f, i) => (
+                <Badge key={i} variant="secondary" className="text-[10px] h-5">
+                  {f}
+                </Badge>
+              ))}
+            </div>
+
+            {/* Summary KPIs - Compact */}
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-4">
+              <Card className="py-0">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Database className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">{dashboardData.total.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground">Total de Registros</p>
+                      <p className="text-xl font-bold leading-tight">{dashboardData.total.toLocaleString("pt-BR")}</p>
+                      <p className="text-[10px] text-muted-foreground">Total Registros</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
               
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-lg bg-chart-2/10 flex items-center justify-center">
-                      <TrendingUp className="h-6 w-6 text-chart-2" />
+              <Card className="py-0">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                      <TrendingUp className="h-4 w-4 text-emerald-500" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">{dashboardData.byUnidade.length}</p>
-                      <p className="text-sm text-muted-foreground">Unidades</p>
+                      <p className="text-xl font-bold leading-tight">{dashboardData.byUnidade.length}</p>
+                      <p className="text-[10px] text-muted-foreground">Unidades</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
               
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-lg bg-chart-3/10 flex items-center justify-center">
-                      <BarChart3 className="h-6 w-6 text-chart-3" />
+              <Card className="py-0">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                      <BarChart3 className="h-4 w-4 text-amber-500" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">{dashboardData.byProcedimento.length}</p>
-                      <p className="text-sm text-muted-foreground">Procedimentos</p>
+                      <p className="text-xl font-bold leading-tight">{dashboardData.byProcedimento.length}</p>
+                      <p className="text-[10px] text-muted-foreground">Procedimentos</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
               
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-lg bg-chart-4/10 flex items-center justify-center">
-                      <FileSpreadsheet className="h-6 w-6 text-chart-4" />
+              <Card className="py-0">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                      <FileSpreadsheet className="h-4 w-4 text-blue-500" />
                     </div>
                     <div>
-                      <Button onClick={handleExportExcel} className="w-full">
-                        <Download className="mr-2 h-4 w-4" />
-                        Exportar Excel
-                      </Button>
+                      <p className="text-xl font-bold leading-tight">{dashboardData.totalUnfiltered.toLocaleString("pt-BR")}</p>
+                      <p className="text-[10px] text-muted-foreground">Total Disponível</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Charts Row 1 */}
-            <div className="grid gap-6 lg:grid-cols-2 mb-6">
+            {/* Auto-Insights */}
+            {dashboardData.autoInsights && dashboardData.autoInsights.length > 0 && (
+              <Card className="mb-4 border-blue-500/30 bg-blue-500/5">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-start gap-2">
+                    <Lightbulb className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+                    <div className="flex-1 space-y-1">
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">Insights Automáticos</p>
+                      <div className="grid gap-1">
+                        {dashboardData.autoInsights.map((insight, i) => (
+                          <div key={i} className="text-xs text-muted-foreground">
+                            <Streamdown>{insight}</Streamdown>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="pt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px]"
+                          onClick={handleGenerateLlmInsights}
+                          disabled={insightsMutation.isPending}
+                        >
+                          {insightsMutation.isPending ? (
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          ) : (
+                            <Lightbulb className="mr-1 h-3 w-3" />
+                          )}
+                          Gerar análise detalhada com IA
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* LLM Insights */}
+            {showLlmInsights && insightsMutation.data?.ok && (
+              <Card className="mb-4 border-purple-500/30 bg-purple-500/5">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-start gap-2">
+                    <Lightbulb className="h-4 w-4 text-purple-500 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 mb-2">Análise Detalhada (IA)</p>
+                      <div className="text-xs prose prose-sm max-w-none dark:prose-invert">
+                        <Streamdown>{insightsMutation.data.insights}</Streamdown>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Charts Row 1 - Compact */}
+            <div className="grid gap-4 lg:grid-cols-2 mb-4">
               {/* By Unidade */}
               <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4" />
+                <CardHeader className="pb-1 pt-3 px-4">
+                  <CardTitle className="text-xs flex items-center gap-1">
+                    <BarChart3 className="h-3 w-3" />
                     Distribuição por Unidade
                   </CardTitle>
-                  <CardDescription>Top 15 unidades com mais registros</CardDescription>
+                  <CardDescription className="text-[10px]">Top 15 unidades</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="h-[300px]">
+                <CardContent className="px-4 pb-3">
+                  <div className="h-[260px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={dashboardData.byUnidade}
                         layout="vertical"
-                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        margin={{ top: 2, right: 20, left: 10, bottom: 2 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" />
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                        <XAxis type="number" tick={{ fontSize: 10 }} />
                         <YAxis
                           type="category"
                           dataKey="name"
-                          width={150}
-                          tick={{ fontSize: 11 }}
-                          tickFormatter={(value) => value.length > 20 ? value.substring(0, 20) + "..." : value}
+                          width={140}
+                          tick={{ fontSize: 9 }}
+                          tickFormatter={(value) => value.length > 22 ? value.substring(0, 22) + "…" : value}
                         />
                         <Tooltip
-                          formatter={(value: number) => [value, "Quantidade"]}
+                          formatter={(value: number) => [value.toLocaleString("pt-BR"), "Qtd"]}
                           labelFormatter={(label) => label}
+                          contentStyle={{ fontSize: 11 }}
                         />
-                        <Bar dataKey="value" fill="#0088FE" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="value" fill="#0088FE" radius={[0, 3, 3, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -594,35 +666,36 @@ export default function Dashboard() {
 
               {/* By Procedimento */}
               <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4" />
+                <CardHeader className="pb-1 pt-3 px-4">
+                  <CardTitle className="text-xs flex items-center gap-1">
+                    <BarChart3 className="h-3 w-3" />
                     Distribuição por Procedimento
                   </CardTitle>
-                  <CardDescription>Top 15 procedimentos mais solicitados</CardDescription>
+                  <CardDescription className="text-[10px]">Top 15 procedimentos</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="h-[300px]">
+                <CardContent className="px-4 pb-3">
+                  <div className="h-[260px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={dashboardData.byProcedimento}
                         layout="vertical"
-                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        margin={{ top: 2, right: 20, left: 10, bottom: 2 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" />
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                        <XAxis type="number" tick={{ fontSize: 10 }} />
                         <YAxis
                           type="category"
                           dataKey="name"
-                          width={150}
-                          tick={{ fontSize: 11 }}
-                          tickFormatter={(value) => value.length > 20 ? value.substring(0, 20) + "..." : value}
+                          width={140}
+                          tick={{ fontSize: 9 }}
+                          tickFormatter={(value) => value.length > 22 ? value.substring(0, 22) + "…" : value}
                         />
                         <Tooltip
-                          formatter={(value: number) => [value, "Quantidade"]}
+                          formatter={(value: number) => [value.toLocaleString("pt-BR"), "Qtd"]}
                           labelFormatter={(label) => label}
+                          contentStyle={{ fontSize: 11 }}
                         />
-                        <Bar dataKey="value" fill="#00C49F" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="value" fill="#00C49F" radius={[0, 3, 3, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -630,19 +703,18 @@ export default function Dashboard() {
               </Card>
             </div>
 
-            {/* Charts Row 2 */}
-            <div className="grid gap-6 lg:grid-cols-2">
+            {/* Charts Row 2 - Compact */}
+            <div className="grid gap-4 lg:grid-cols-2">
               {/* By Risco */}
               <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <PieChart className="h-4 w-4" />
+                <CardHeader className="pb-1 pt-3 px-4">
+                  <CardTitle className="text-xs flex items-center gap-1">
+                    <PieChart className="h-3 w-3" />
                     Classificação de Risco
                   </CardTitle>
-                  <CardDescription>Distribuição por classificação de risco</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="h-[250px]">
+                <CardContent className="px-4 pb-3">
+                  <div className="h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <RechartsPieChart>
                         <Pie
@@ -651,7 +723,7 @@ export default function Dashboard() {
                           cy="50%"
                           labelLine={false}
                           label={({ name, percent }) => `${formatRiskLabel(name)} (${(percent * 100).toFixed(0)}%)`}
-                          outerRadius={80}
+                          outerRadius={70}
                           fill="#8884d8"
                           dataKey="value"
                         >
@@ -663,7 +735,8 @@ export default function Dashboard() {
                           ))}
                         </Pie>
                         <Tooltip
-                          formatter={(value: number, name: string) => [value, formatRiskLabel(name)]}
+                          formatter={(value: number, name: string) => [value.toLocaleString("pt-BR"), formatRiskLabel(name)]}
+                          contentStyle={{ fontSize: 11 }}
                         />
                       </RechartsPieChart>
                     </ResponsiveContainer>
@@ -673,15 +746,14 @@ export default function Dashboard() {
 
               {/* By Status */}
               <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <PieChart className="h-4 w-4" />
-                    Status das Solicitações
+                <CardHeader className="pb-1 pt-3 px-4">
+                  <CardTitle className="text-xs flex items-center gap-1">
+                    <PieChart className="h-3 w-3" />
+                    Status
                   </CardTitle>
-                  <CardDescription>Distribuição por status</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="h-[250px]">
+                <CardContent className="px-4 pb-3">
+                  <div className="h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <RechartsPieChart>
                         <Pie
@@ -690,15 +762,18 @@ export default function Dashboard() {
                           cy="50%"
                           labelLine={false}
                           label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                          outerRadius={80}
+                          outerRadius={70}
                           fill="#8884d8"
                           dataKey="value"
                         >
-                          {dashboardData.byStatus.map((entry, index) => (
+                          {dashboardData.byStatus.map((_entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(value: number) => [value, "Quantidade"]} />
+                        <Tooltip
+                          formatter={(value: number) => [value.toLocaleString("pt-BR"), "Qtd"]}
+                          contentStyle={{ fontSize: 11 }}
+                        />
                       </RechartsPieChart>
                     </ResponsiveContainer>
                   </div>
@@ -709,14 +784,14 @@ export default function Dashboard() {
         ) : (
           /* Empty State */
           <Card>
-            <CardContent className="py-12 text-center">
-              <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-lg font-medium">Dashboard Vazio</p>
-              <p className="text-sm text-muted-foreground mb-4">
+            <CardContent className="py-10 text-center">
+              <BarChart3 className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+              <p className="text-sm font-medium">Dashboard Vazio</p>
+              <p className="text-xs text-muted-foreground mb-3">
                 Configure os filtros e clique em "Carregar" para visualizar os gráficos
               </p>
-              <Button onClick={handleLoadDashboard} disabled={!configQuery.data}>
-                <RefreshCw className="mr-2 h-4 w-4" />
+              <Button onClick={handleLoadDashboard} disabled={!configQuery.data} size="sm">
+                <RefreshCw className="mr-1 h-3 w-3" />
                 Carregar Dashboard
               </Button>
             </CardContent>

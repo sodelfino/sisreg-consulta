@@ -29,9 +29,6 @@ interface SisregCredentials {
   password: string;
 }
 
-/**
- * Get the index path based on index type
- */
 function getIndexPath(indexType: IndexType): string {
   return INDEX_PATHS[indexType];
 }
@@ -49,11 +46,11 @@ function buildQueryMarcacaoAmbulatorial(
   dateEnd?: string,
   codigoCentralReguladora?: string[],
   selectedFields?: string[],
-  procedimentoSearch?: string
+  procedimentoSearch?: string,
+  riscoFilter?: string[],
+  situacaoFilter?: string[]
 ): Record<string, unknown> {
   const defaultFields = DEFAULT_FIELDS_MARCACAO;
-
-  // Determine which fields to return
   const modeFields = mode === "novas" ? defaultFields.novas :
                      mode === "agendadas" ? defaultFields.agendadas :
                      mode === "atendidas" ? defaultFields.atendidas :
@@ -69,14 +66,12 @@ function buildQueryMarcacaoAmbulatorial(
     _source: fieldsToReturn,
   };
 
-  // Build must clauses
   const mustClauses: Record<string, unknown>[] = [];
 
-  // Quick mode: just return latest records
   if (mode === "quick") {
     query.sort = [{ data_solicitacao: { order: "desc" } }];
   } else {
-    // Add date range based on mode
+    // Date range based on mode
     if (dateStart && dateEnd) {
       let dateField = "data_solicitacao";
       if (mode === "agendadas") dateField = "data_aprovacao";
@@ -84,26 +79,19 @@ function buildQueryMarcacaoAmbulatorial(
 
       mustClauses.push({
         range: {
-          [dateField]: {
-            gte: dateStart,
-            lte: dateEnd,
-          },
+          [dateField]: { gte: dateStart, lte: dateEnd },
         },
       });
     }
 
-    // Add status filter for agendadas/atendidas
+    // Status filter for agendadas/atendidas
     if (mode === "agendadas") {
-      mustClauses.push({
-        terms: { "status_solicitacao.keyword": STATUS_AGENDADAS },
-      });
+      mustClauses.push({ terms: { "status_solicitacao.keyword": STATUS_AGENDADAS } });
     } else if (mode === "atendidas") {
-      mustClauses.push({
-        terms: { "status_solicitacao.keyword": STATUS_ATENDIDAS },
-      });
+      mustClauses.push({ terms: { "status_solicitacao.keyword": STATUS_ATENDIDAS } });
     }
 
-    // Add sorting
+    // Sorting
     if (mode === "novas") {
       query.sort = [{ data_solicitacao: { order: "desc" } }];
     } else if (mode === "agendadas") {
@@ -115,12 +103,20 @@ function buildQueryMarcacaoAmbulatorial(
 
   // Optional filter by central reguladora
   if (codigoCentralReguladora && codigoCentralReguladora.length > 0) {
-    mustClauses.push({
-      terms: { codigo_central_reguladora: codigoCentralReguladora },
-    });
+    mustClauses.push({ terms: { codigo_central_reguladora: codigoCentralReguladora } });
   }
 
-  // Procedimento search filter (marcação tem descricao_interna, descricao_sigtap, nome_grupo)
+  // Risco filter
+  if (riscoFilter && riscoFilter.length > 0) {
+    mustClauses.push({ terms: { "codigo_classificacao_risco": riscoFilter } });
+  }
+
+  // Situação/status filter (marcação usa status_solicitacao.keyword)
+  if (situacaoFilter && situacaoFilter.length > 0) {
+    mustClauses.push({ terms: { "status_solicitacao.keyword": situacaoFilter } });
+  }
+
+  // Procedimento search (marcação tem descricao_interna, descricao_sigtap, nome_grupo)
   if (procedimentoSearch && procedimentoSearch.trim()) {
     const searchTerm = procedimentoSearch.trim().toLowerCase();
     mustClauses.push({
@@ -138,11 +134,8 @@ function buildQueryMarcacaoAmbulatorial(
     });
   }
 
-  // Build final query
   if (mustClauses.length > 0) {
-    query.query = {
-      bool: { must: mustClauses },
-    };
+    query.query = { bool: { must: mustClauses } };
   }
 
   return query;
@@ -162,10 +155,11 @@ function buildQuerySolicitacaoAmbulatorial(
   dateEnd?: string,
   _codigoCentralReguladora?: string[],
   selectedFields?: string[],
-  procedimentoSearch?: string
+  procedimentoSearch?: string,
+  riscoFilter?: string[],
+  situacaoFilter?: string[]
 ): Record<string, unknown> {
   const defaultFields = DEFAULT_FIELDS_SOLICITACAO;
-
   const fieldsToReturn = selectedFields && selectedFields.length > 0 
     ? selectedFields 
     : [...defaultFields.common, ...defaultFields.fila];
@@ -174,33 +168,32 @@ function buildQuerySolicitacaoAmbulatorial(
     size: Math.min(size, 1000),
     from,
     _source: fieldsToReturn,
-    // Ordenar por data_solicitacao ascendente: mais antigo primeiro (maior tempo de espera)
     sort: [{ data_solicitacao: { order: "asc" } }],
   };
 
-  // Build must clauses
   const mustClauses: Record<string, unknown>[] = [];
 
   // FILTRO OBRIGATÓRIO: centrais reguladoras de Macaé
-  // Conforme documentação v2.1, este é o único filtro obrigatório
-  mustClauses.push({
-    terms: { codigo_central_reguladora: CENTRAIS_REGULADORAS_MACAE },
-  });
+  mustClauses.push({ terms: { codigo_central_reguladora: CENTRAIS_REGULADORAS_MACAE } });
 
-  // Optional date range (usa data_solicitacao para fila)
+  // Optional date range
   if (dateStart && dateEnd) {
     mustClauses.push({
-      range: {
-        data_solicitacao: {
-          gte: dateStart,
-          lte: dateEnd,
-        },
-      },
+      range: { data_solicitacao: { gte: dateStart, lte: dateEnd } },
     });
   }
 
-  // Procedimento search filter
-  // Solicitação tem: descricao_interna_procedimento, nome_grupo_procedimento
+  // Risco filter
+  if (riscoFilter && riscoFilter.length > 0) {
+    mustClauses.push({ terms: { "codigo_classificacao_risco": riscoFilter } });
+  }
+
+  // Situação filter (solicitação usa sigla_situacao.keyword)
+  if (situacaoFilter && situacaoFilter.length > 0) {
+    mustClauses.push({ terms: { "sigla_situacao.keyword": situacaoFilter } });
+  }
+
+  // Procedimento search (solicitação tem descricao_interna_procedimento, nome_grupo_procedimento)
   if (procedimentoSearch && procedimentoSearch.trim()) {
     const searchTerm = procedimentoSearch.trim().toLowerCase();
     mustClauses.push({
@@ -216,11 +209,7 @@ function buildQuerySolicitacaoAmbulatorial(
     });
   }
 
-  // Build final query (sempre terá pelo menos o filtro de centrais reguladoras)
-  query.query = {
-    bool: { must: mustClauses },
-  };
-
+  query.query = { bool: { must: mustClauses } };
   return query;
 }
 
@@ -228,19 +217,21 @@ function buildQuerySolicitacaoAmbulatorial(
  * Main query builder - delegates to specific builders based on indexType
  */
 function buildElasticsearchQuery(input: SisregQueryInput): Record<string, unknown> {
-  const { indexType, mode, size, from = 0, dateStart, dateEnd, codigoCentralReguladora, selectedFields, procedimentoSearch } = input;
+  const { indexType, mode, size, from = 0, dateStart, dateEnd, codigoCentralReguladora, selectedFields, procedimentoSearch, riscoFilter, situacaoFilter } = input;
 
   if (indexType === "marcacao") {
     return buildQueryMarcacaoAmbulatorial(
       mode as MarcacaoMode, size, from,
       dateStart, dateEnd, codigoCentralReguladora,
-      selectedFields, procedimentoSearch
+      selectedFields, procedimentoSearch,
+      riscoFilter, situacaoFilter
     );
   } else {
     return buildQuerySolicitacaoAmbulatorial(
       mode as SolicitacaoMode, size, from,
       dateStart, dateEnd, codigoCentralReguladora,
-      selectedFields, procedimentoSearch
+      selectedFields, procedimentoSearch,
+      riscoFilter, situacaoFilter
     );
   }
 }
@@ -254,13 +245,14 @@ export async function executeSisregSearch(
 ): Promise<SisregQueryResult> {
   const { baseUrl, username, password } = credentials;
   const indexPath = getIndexPath(input.indexType);
-  
   const url = `${baseUrl}${indexPath}`;
   const esQuery = buildElasticsearchQuery(input);
-
   const authHeader = "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -268,28 +260,19 @@ export async function executeSisregSearch(
         "Authorization": authHeader,
       },
       body: JSON.stringify(esQuery),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}`;
-      
-      if (response.status === 401) {
-        errorMessage = "Credenciais inválidas. Verifique usuário e senha.";
-      } else if (response.status === 403) {
-        errorMessage = "Acesso negado. Verifique suas permissões.";
-      } else if (response.status === 400) {
-        errorMessage = "Requisição inválida. Verifique os parâmetros da consulta.";
-      } else if (response.status === 404) {
-        errorMessage = "Índice não encontrado. Verifique a URL do endpoint.";
-      }
+      if (response.status === 401) errorMessage = "Credenciais inválidas. Verifique usuário e senha.";
+      else if (response.status === 403) errorMessage = "Acesso negado. Verifique suas permissões.";
+      else if (response.status === 400) errorMessage = "Requisição inválida. Verifique os parâmetros da consulta.";
+      else if (response.status === 404) errorMessage = "Índice não encontrado. Verifique a URL do endpoint.";
 
-      return {
-        ok: false,
-        status: response.status,
-        total: 0,
-        hits: [],
-        errorMessage,
-      };
+      return { ok: false, status: response.status, total: 0, hits: [], errorMessage };
     }
 
     const data = await response.json() as {
@@ -300,7 +283,6 @@ export async function executeSisregSearch(
       };
     };
 
-    // Extract total count (handle both ES 6.x and 7.x formats)
     let total = 0;
     if (data.hits?.total) {
       total = typeof data.hits.total === "number" 
@@ -310,21 +292,18 @@ export async function executeSisregSearch(
 
     const hits = data.hits?.hits?.map((hit) => hit._source || {}) || [];
 
-    return {
-      ok: true,
-      status: response.status,
-      took: data.took,
-      total,
-      hits,
-    };
+    return { ok: true, status: response.status, took: data.took, total, hits };
   } catch (error) {
     console.error("[SISREG] Query error:", error);
+    const isTimeout = error instanceof Error && error.name === "AbortError";
     return {
       ok: false,
-      status: 500,
+      status: isTimeout ? 408 : 500,
       total: 0,
       hits: [],
-      errorMessage: error instanceof Error ? error.message : "Erro desconhecido ao consultar API",
+      errorMessage: isTimeout 
+        ? "Timeout: a consulta demorou mais de 30 segundos. Tente reduzir o período ou os filtros."
+        : (error instanceof Error ? error.message : "Erro desconhecido ao consultar API"),
     };
   }
 }
@@ -342,20 +321,11 @@ export async function testSisregConnection(credentials: SisregCredentials): Prom
     });
 
     if (result.ok) {
-      return {
-        ok: true,
-        message: "Conexão estabelecida com sucesso!",
-      };
+      return { ok: true, message: "Conexão estabelecida com sucesso!" };
     } else {
-      return {
-        ok: false,
-        message: result.errorMessage || "Falha na conexão",
-      };
+      return { ok: false, message: result.errorMessage || "Falha na conexão" };
     }
   } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : "Erro desconhecido",
-    };
+    return { ok: false, message: error instanceof Error ? error.message : "Erro desconhecido" };
   }
 }
