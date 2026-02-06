@@ -88,3 +88,11 @@
 - [x] Separar dashboards para cada módulo (Solicitação vs Marcação)
 - [x] Garantir exportação XLSX funciona corretamente para ambos os módulos
 - [x] Ajustar colunas exibidas na tabela de Solicitações conforme campos reais
+
+
+## Versão 2.2 - Tempo de Espera na Fila
+
+- [x] Ordenação por data_solicitacao (ascendente) via Elasticsearch para solicitações
+- [x] Coluna "Tempo de Espera" calculada no frontend com date-fns
+- [x] Cores personalizadas: verde (até 30d), amarelo (até 90d), laranja (até 120d), vermelho (180d+)
+- [x] Formato: "X dias" ou "X meses, Y dias"

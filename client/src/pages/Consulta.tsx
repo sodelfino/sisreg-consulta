@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { differenceInDays, differenceInMonths, parseISO } from "date-fns";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -219,12 +220,23 @@ export default function Consulta() {
       Object.keys(hit).forEach((key) => allKeys.add(key));
     });
     const headers = Array.from(allKeys);
+    
+    // Adicionar coluna de tempo de espera para solicitações
+    const isFilaSolicitacao = indexType === "solicitacao";
+    if (isFilaSolicitacao && !headers.includes("tempo_espera_dias")) {
+      headers.push("tempo_espera_dias");
+    }
 
     // Build CSV content
     const csvRows = [headers.join(";")];
     
     results.hits.forEach((hit) => {
       const row = headers.map((header) => {
+        // Coluna calculada de tempo de espera
+        if (header === "tempo_espera_dias" && isFilaSolicitacao) {
+          const { dias, texto } = calcularTempoEspera(hit.data_solicitacao);
+          return `${dias} (${texto})`;
+        }
         const value = hit[header];
         if (value === null || value === undefined) return "";
         const strValue = String(value);
@@ -326,7 +338,7 @@ export default function Consulta() {
         ...modeFields.slice(0, 2),
       ];
     } else {
-      // Solicitação: campos específicos da fila
+      // Solicitação: campos específicos da fila (inclui tempo de espera calculado)
       return [
         "no_usuario",
         "cns_usuario",
@@ -337,11 +349,42 @@ export default function Consulta() {
         "codigo_classificacao_risco",
         "sigla_situacao",
         "data_solicitacao",
+        "__tempo_espera",
         "nome_medico_solicitante",
         "codigo_tipo_regulacao",
       ];
     }
   }, [selectedFields, mode, indexType]);
+
+  // Calcular tempo de espera a partir da data_solicitacao
+  const calcularTempoEspera = (dataSolicitacao: unknown): { dias: number; texto: string } => {
+    if (!dataSolicitacao) return { dias: 0, texto: "-" };
+    try {
+      const dataStr = String(dataSolicitacao);
+      const data = dataStr.includes("T") ? parseISO(dataStr) : new Date(dataStr);
+      if (isNaN(data.getTime())) return { dias: 0, texto: "-" };
+      
+      const hoje = new Date();
+      const dias = differenceInDays(hoje, data);
+      const meses = differenceInMonths(hoje, data);
+      
+      if (meses >= 1) {
+        const diasRestantes = dias - (meses * 30);
+        return { dias, texto: `${meses} ${meses === 1 ? "mês" : "meses"}, ${diasRestantes} dias` };
+      }
+      return { dias, texto: `${dias} ${dias === 1 ? "dia" : "dias"}` };
+    } catch {
+      return { dias: 0, texto: "-" };
+    }
+  };
+
+  // Cor do tempo de espera baseada nos dias
+  const getCorTempoEspera = (dias: number): string => {
+    if (dias <= 30) return "text-green-600 bg-green-50";
+    if (dias <= 90) return "text-yellow-600 bg-yellow-50";
+    if (dias <= 120) return "text-orange-600 bg-orange-50";
+    return "text-red-600 bg-red-50";
+  };
 
   // Format cell value
   const formatCellValue = (key: string, value: unknown): string => {
@@ -373,9 +416,10 @@ export default function Consulta() {
 
   // Get field label
   const getFieldLabel = (key: string): string => {
-    // Custom labels for estabelecimento
+    // Custom labels
     if (key === "nome_unidade_executante") return "Estabelecimento";
     if (key === "nome_unidade_solicitante") return "Unidade Solicitante";
+    if (key === "__tempo_espera") return "Tempo de Espera";
     
     const field = availableFields.find((f) => f.key === key);
     return field?.label || key;
@@ -806,11 +850,26 @@ export default function Consulta() {
                       <tbody>
                         {results.hits.map((hit, idx) => (
                           <tr key={idx}>
-                            {displayColumns.map((col) => (
-                              <td key={col} className="whitespace-nowrap">
-                                {formatCellValue(col, hit[col])}
-                              </td>
-                            ))}
+                            {displayColumns.map((col) => {
+                              // Coluna especial: Tempo de Espera (calculado no frontend)
+                              if (col === "__tempo_espera") {
+                                const { dias, texto } = calcularTempoEspera(hit.data_solicitacao);
+                                const corClasse = getCorTempoEspera(dias);
+                                return (
+                                  <td key={col} className="whitespace-nowrap">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${corClasse}`}>
+                                      <Clock className="h-3 w-3" />
+                                      {texto}
+                                    </span>
+                                  </td>
+                                );
+                              }
+                              return (
+                                <td key={col} className="whitespace-nowrap">
+                                  {formatCellValue(col, hit[col])}
+                                </td>
+                              );
+                            })}
                           </tr>
                         ))}
                       </tbody>

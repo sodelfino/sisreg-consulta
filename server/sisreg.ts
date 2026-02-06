@@ -174,7 +174,8 @@ function buildQuerySolicitacaoAmbulatorial(
     size: Math.min(size, 1000),
     from,
     _source: fieldsToReturn,
-    sort: [{ data_solicitacao: { order: "desc" } }],
+    // Ordenar por data_solicitacao ascendente: mais antigo primeiro (maior tempo de espera)
+    sort: [{ data_solicitacao: { order: "asc" } }],
   };
 
   // Build must clauses
