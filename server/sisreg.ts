@@ -178,8 +178,16 @@ function buildQuerySolicitacaoAmbulatorial(
   const mustClauses: Record<string, unknown>[] = [];
 
   // FILTRO OBRIGATÓRIO: centrais reguladoras de Macaé
-  // Tenta com e sem .keyword para compatibilidade
-  mustClauses.push({ terms: { "codigo_central_reguladora": CENTRAIS_REGULADORAS_MACAE } });
+  // Tenta com e sem .keyword para compatibilidade (usa should para aceitar qualquer um)
+  mustClauses.push({
+    bool: {
+      should: [
+        { terms: { "codigo_central_reguladora": CENTRAIS_REGULADORAS_MACAE } },
+        { terms: { "codigo_central_reguladora.keyword": CENTRAIS_REGULADORAS_MACAE } },
+      ],
+      minimum_should_match: 1,
+    },
+  });
 
   // Optional date range (end-exclusive: lt nextDay para incluir o último dia inteiro)
   if (dateStart && dateEnd) {

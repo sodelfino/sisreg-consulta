@@ -140,3 +140,7 @@
 
 - [x] Bug 1: Navegação inicial - card Solicitações abre Marcações primeiro
 - [x] Bug 2: Fila de Solicitações retorna 0 resultados (campo de data/central errado)
+
+## Bugs v3.2
+
+- [x] Bug: Solicitações Ambulatoriais retorna 0 resultados com filtros de data
