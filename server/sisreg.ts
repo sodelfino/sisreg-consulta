@@ -189,6 +189,17 @@ function buildQuerySolicitacaoAmbulatorial(
     },
   });
 
+  // FILTRO OBRIGATÓRIO: status da fila de espera (conforme item 4.2)
+  // Solicitações em fila de espera, pendentes com regulador ou reenviadas
+  const STATUS_FILA = [
+    "SOLICITAÇÃO / PENDENTE / FILA DE ESPERA",
+    "SOLICITAÇÃO / PENDENTE / REGULADOR",
+    "SOLICITAÇÃO / REENVIADA / REGULADOR",
+  ];
+  mustClauses.push({
+    terms: { "status_solicitacao.keyword": STATUS_FILA },
+  });
+
   // Optional date range (end-exclusive: lt nextDay para incluir o último dia inteiro)
   if (dateStart && dateEnd) {
     const endDate = new Date(dateEnd + "T00:00:00");
