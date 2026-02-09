@@ -133,6 +133,7 @@ export const DEFAULT_FIELDS_SOLICITACAO = {
     "sigla_situacao",
     "codigo_interno_procedimento",
     "descricao_interna_procedimento",
+    "descricao_sigtap_procedimento", // Fallback quando descricao_interna estiver vazia
     "codigo_classificacao_risco",
     "cns_usuario",
     "no_usuario",

@@ -433,8 +433,14 @@ export default function Consulta() {
   };
 
   // Format cell value
-  const formatCellValue = (key: string, value: unknown): string => {
-    if (value === null || value === undefined) return "-";
+  const formatCellValue = (key: string, value: unknown, hit?: Record<string, unknown>): string => {
+    if (value === null || value === undefined || value === "") {
+      // Fallback: se descricao_interna_procedimento estiver vazio, usar descricao_sigtap_procedimento
+      if (key === "descricao_interna_procedimento" && hit?.descricao_sigtap_procedimento) {
+        return String(hit.descricao_sigtap_procedimento);
+      }
+      return "-";
+    }
     
     // Format dates
     if (key.startsWith("data_") || key.startsWith("dt_")) {
@@ -952,7 +958,7 @@ export default function Consulta() {
                               }
                               return (
                                 <td key={col} className="whitespace-nowrap">
-                                  {formatCellValue(col, hit[col])}
+                                  {formatCellValue(col, hit[col], hit)}
                                 </td>
                               );
                             })}

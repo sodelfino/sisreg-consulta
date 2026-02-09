@@ -7,3 +7,4 @@
 - [x] Adicionar teste específico para cada endpoint (Marcação e Solicitação)
 - [x] Remover filtro obrigatório de centrais reguladoras que pode estar bloqueando resultados
 - [x] Permitir consulta completamente livre sem filtros obrigatórios
+- [x] Corrigir campo Descrição Procedimento que está vindo vazio em Solicitações Ambulatoriais
