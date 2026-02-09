@@ -15,3 +15,13 @@
 - [x] Implementar fallback inteligente para descrição de procedimento (3 níveis)
 - [x] Melhorar filtro de busca por procedimento com busca parcial em múltiplos campos
 - [x] Criar testes para validar busca de procedimento e fallback
+
+## Dashboard de Métricas Gerenciais
+- [x] Criar endpoint tRPC para calcular tempo médio de espera por procedimento
+- [x] Criar endpoint tRPC para listar top 10 procedimentos mais solicitados
+- [x] Implementar cálculo de tempo de espera (data_solicitacao até hoje)
+- [x] Criar interface do dashboard com cards de métricas
+- [x] Adicionar gráfico de barras para top 10 procedimentos
+- [x] Adicionar tabela com detalhes de tempo médio de espera
+- [x] Criar testes para validar cálculos de métricas
+- [x] Integrar métricas ao Dashboard existente (seção dedicada)

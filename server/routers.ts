@@ -693,6 +693,152 @@ Seja conciso mas informativo. Use formatação markdown para melhor legibilidade
         }
       }),
   }),
+
+  // Métricas gerenciais para dashboard
+  metrics: router({
+    // Calcular tempo médio de espera por procedimento
+    averageWaitTime: protectedProcedure
+      .input(z.object({
+        dateStart: z.string().optional(),
+        dateEnd: z.string().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        try {
+          const config = await getSisregConfig(ctx.user.id);
+          if (!config) {
+            return { ok: false, data: [], error: "Credenciais SISREG não configuradas" };
+          }
+
+          const credentials = {
+            baseUrl: config.baseUrl,
+            username: config.username,
+            password: decryptPassword(config.encryptedPassword),
+          };
+
+          // Buscar todas as solicitações na fila
+          const result = await executeSisregSearch(credentials, {
+            indexType: "solicitacao",
+            mode: "fila",
+            size: 10000, // Máximo para análise
+            from: 0,
+            dateStart: input.dateStart,
+            dateEnd: input.dateEnd,
+          });
+
+          if (!result.ok) {
+            return { ok: false, data: [], error: result.errorMessage };
+          }
+
+          // Agrupar por procedimento e calcular tempo médio
+          const procedimentoMap = new Map<string, { total: number; count: number; codigo: string }>();
+          const now = new Date();
+
+          result.hits.forEach((hit: any) => {
+            const descricao = hit.descricao_interna_procedimento || 
+                             hit.descricao_sigtap_procedimento || 
+                             hit.nome_grupo_procedimento || 
+                             "Sem descrição";
+            const codigo = hit.codigo_interno_procedimento || "";
+            const dataSolicitacao = hit.data_solicitacao;
+
+            if (dataSolicitacao) {
+              const solicitacaoDate = new Date(dataSolicitacao);
+              const diasEspera = Math.floor((now.getTime() - solicitacaoDate.getTime()) / (1000 * 60 * 60 * 24));
+
+              if (!procedimentoMap.has(descricao)) {
+                procedimentoMap.set(descricao, { total: 0, count: 0, codigo });
+              }
+              const entry = procedimentoMap.get(descricao)!;
+              entry.total += diasEspera;
+              entry.count += 1;
+            }
+          });
+
+          // Converter para array e calcular média
+          const data = Array.from(procedimentoMap.entries()).map(([descricao, stats]) => ({
+            descricao,
+            codigo: stats.codigo,
+            mediaDias: Math.round(stats.total / stats.count),
+            totalSolicitacoes: stats.count,
+          }));
+
+          // Ordenar por média de dias (maior primeiro)
+          data.sort((a, b) => b.mediaDias - a.mediaDias);
+
+          return { ok: true, data, error: null };
+        } catch (error) {
+          console.error("[Metrics] Error calculating average wait time:", error);
+          return { ok: false, data: [], error: "Erro ao calcular tempo médio de espera" };
+        }
+      }),
+
+    // Top 10 procedimentos mais solicitados
+    topProcedures: protectedProcedure
+      .input(z.object({
+        dateStart: z.string().optional(),
+        dateEnd: z.string().optional(),
+        limit: z.number().min(1).max(50).default(10),
+      }))
+      .query(async ({ ctx, input }) => {
+        try {
+          const config = await getSisregConfig(ctx.user.id);
+          if (!config) {
+            return { ok: false, data: [], error: "Credenciais SISREG não configuradas" };
+          }
+
+          const credentials = {
+            baseUrl: config.baseUrl,
+            username: config.username,
+            password: decryptPassword(config.encryptedPassword),
+          };
+
+          // Buscar todas as solicitações na fila
+          const result = await executeSisregSearch(credentials, {
+            indexType: "solicitacao",
+            mode: "fila",
+            size: 10000,
+            from: 0,
+            dateStart: input.dateStart,
+            dateEnd: input.dateEnd,
+          });
+
+          if (!result.ok) {
+            return { ok: false, data: [], error: result.errorMessage };
+          }
+
+          // Contar solicitações por procedimento
+          const procedimentoCount = new Map<string, { count: number; codigo: string }>();
+
+          result.hits.forEach((hit: any) => {
+            const descricao = hit.descricao_interna_procedimento || 
+                             hit.descricao_sigtap_procedimento || 
+                             hit.nome_grupo_procedimento || 
+                             "Sem descrição";
+            const codigo = hit.codigo_interno_procedimento || "";
+
+            if (!procedimentoCount.has(descricao)) {
+              procedimentoCount.set(descricao, { count: 0, codigo });
+            }
+            procedimentoCount.get(descricao)!.count += 1;
+          });
+
+          // Converter para array e ordenar
+          const data = Array.from(procedimentoCount.entries())
+            .map(([descricao, stats]) => ({
+              descricao,
+              codigo: stats.codigo,
+              total: stats.count,
+            }))
+            .sort((a, b) => b.total - a.total)
+            .slice(0, input.limit);
+
+          return { ok: true, data, error: null };
+        } catch (error) {
+          console.error("[Metrics] Error calculating top procedures:", error);
+          return { ok: false, data: [], error: "Erro ao calcular procedimentos mais solicitados" };
+        }
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

@@ -150,6 +150,17 @@ export default function Dashboard() {
     },
   });
 
+  // Métricas gerenciais
+  const topProcedures = trpc.metrics.topProcedures.useQuery(
+    { dateStart, dateEnd, limit: 10 },
+    { enabled: isAuthenticated && indexType === "solicitacao" }
+  );
+
+  const averageWaitTime = trpc.metrics.averageWaitTime.useQuery(
+    { dateStart, dateEnd },
+    { enabled: isAuthenticated && indexType === "solicitacao" }
+  );
+
   // Load dashboard data
   const handleLoadDashboard = () => {
     if (!configQuery.data) {
@@ -569,6 +580,172 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Métricas Gerenciais - Apenas para Solicitações */}
+            {indexType === "solicitacao" && topProcedures.data?.ok && averageWaitTime.data?.ok && (
+              <div className="mb-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-primary" />
+                  <h2 className="text-sm font-semibold">Métricas Gerenciais</h2>
+                </div>
+
+                {/* Cards de Métricas */}
+                <div className="grid gap-3 grid-cols-1 lg:grid-cols-3">
+                  <Card>
+                    <CardHeader className="pb-2 pt-3 px-4">
+                      <CardTitle className="text-xs flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Tempo Médio de Espera
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3">
+                      <div className="text-2xl font-bold">
+                        {averageWaitTime.data.data.length > 0
+                          ? Math.round(
+                              averageWaitTime.data.data.reduce((sum, item) => sum + item.mediaDias, 0) /
+                                averageWaitTime.data.data.length
+                            )
+                          : 0}{" "}
+                        dias
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">Média geral da fila</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2 pt-3 px-4">
+                      <CardTitle className="text-xs flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Maior Tempo de Espera
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3">
+                      <div className="text-2xl font-bold text-red-600">
+                        {averageWaitTime.data.data.length > 0 ? averageWaitTime.data.data[0].mediaDias : 0} dias
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                        {averageWaitTime.data.data.length > 0 ? averageWaitTime.data.data[0].descricao : "N/A"}
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2 pt-3 px-4">
+                      <CardTitle className="text-xs flex items-center gap-1">
+                        <BarChart3 className="h-3 w-3" />
+                        Procedimento Mais Solicitado
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3">
+                      <div className="text-2xl font-bold">
+                        {topProcedures.data.data.length > 0 ? topProcedures.data.data[0].total : 0}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                        {topProcedures.data.data.length > 0 ? topProcedures.data.data[0].descricao : "N/A"}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Gráfico de Top 10 Procedimentos */}
+                <Card>
+                  <CardHeader className="pb-1 pt-3 px-4">
+                    <CardTitle className="text-xs flex items-center gap-1">
+                      <BarChart3 className="h-3 w-3" />
+                      Top 10 Procedimentos Mais Solicitados
+                    </CardTitle>
+                    <CardDescription className="text-[10px]">Volume de solicitações por procedimento</CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={topProcedures.data.data.map((item) => ({
+                            nome: item.descricao.length > 35 ? item.descricao.substring(0, 35) + "..." : item.descricao,
+                            total: item.total,
+                            nomeCompleto: item.descricao,
+                          }))}
+                          layout="vertical"
+                          margin={{ top: 2, right: 20, left: 10, bottom: 2 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                          <XAxis type="number" tick={{ fontSize: 10 }} />
+                          <YAxis
+                            type="category"
+                            dataKey="nome"
+                            width={180}
+                            tick={{ fontSize: 9 }}
+                          />
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                return (
+                                  <div className="bg-background border rounded-lg p-2 shadow-lg">
+                                    <p className="font-medium text-xs">{payload[0].payload.nomeCompleto}</p>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      Total: {payload[0].value} solicitações
+                                    </p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 3, 3, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Tabela de Tempo Médio de Espera */}
+                <Card>
+                  <CardHeader className="pb-1 pt-3 px-4">
+                    <CardTitle className="text-xs flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Tempo Médio de Espera por Procedimento
+                    </CardTitle>
+                    <CardDescription className="text-[10px]">Top 15 procedimentos com maior tempo de espera</CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[10px]">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left p-1">#</th>
+                            <th className="text-left p-1">Procedimento</th>
+                            <th className="text-right p-1">Média (dias)</th>
+                            <th className="text-right p-1">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {averageWaitTime.data.data.slice(0, 15).map((item, index) => (
+                            <tr key={index} className="border-b hover:bg-muted/50">
+                              <td className="p-1">{index + 1}</td>
+                              <td className="p-1 text-[9px]">{item.descricao}</td>
+                              <td className="text-right p-1 font-semibold">
+                                <span
+                                  className={
+                                    item.mediaDias > 90
+                                      ? "text-red-600"
+                                      : item.mediaDias > 60
+                                      ? "text-yellow-600"
+                                      : "text-green-600"
+                                  }
+                                >
+                                  {item.mediaDias}
+                                </span>
+                              </td>
+                              <td className="text-right p-1">{item.totalSolicitacoes}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {/* Auto-Insights */}
             {dashboardData.autoInsights && dashboardData.autoInsights.length > 0 && (
