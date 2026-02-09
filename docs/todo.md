@@ -39,3 +39,8 @@
 - [x] Garantir que Nome Grupo Procedimento seja coluna separada
 - [x] Ajustar filtro de busca para não usar nome_grupo_procedimento
 - [x] Validar que descrição não mostra grupo quando vazia
+
+## Teste de Formatação de Descrição
+- [x] Criar relatório de validação com cenários de teste
+- [x] Validar formatação de descrição de procedimento via testes unitários
+- [x] Documentar resultados do teste (VALIDACAO_DESCRICAO_PROCEDIMENTO.md)
