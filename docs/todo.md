@@ -25,3 +25,10 @@
 - [x] Adicionar tabela com detalhes de tempo médio de espera
 - [x] Criar testes para validar cálculos de métricas
 - [x] Integrar métricas ao Dashboard existente (seção dedicada)
+
+## Correção de Campo de Descrição (descricao_interna_procedimento)
+- [x] Verificar _source no backend para garantir que descricao_interna_procedimento está incluído
+- [x] Corrigir mapeamento da tabela no frontend para usar descricao_interna_procedimento
+- [x] Corrigir filtro de busca para usar exclusivamente descricao_interna_procedimento com match parcial
+- [ ] Validar que coluna aparece preenchida sem filtro (requer teste com credenciais reais)
+- [ ] Validar que busca por "CARDIO", "CONSULTA", "ELETRO" retorna resultados (requer teste com credenciais reais)
