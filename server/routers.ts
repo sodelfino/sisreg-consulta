@@ -99,6 +99,30 @@ export const appRouter = router({
 
   // SISREG Exploration (para descobrir campos e valores)
   explore: router({
+    sampleDoc: protectedProcedure
+      .input(z.object({
+        indexType: indexTypeSchema,
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config = await getSisregConfig(ctx.user.id);
+        if (!config) {
+          return { ok: false, doc: null, errorMessage: "Configuração não encontrada." };
+        }
+        const password = decryptPassword(config.encryptedPassword);
+        const indexPath = input.indexType === "marcacao" 
+          ? "/marcacao-ambulatorial-rj-macae/_search"
+          : "/solicitacao-ambulatorial-rj-macae/_search";
+        const result = await exploreIndex(
+          { baseUrl: config.baseUrl, username: config.username, password },
+          indexPath,
+          1
+        );
+        if (!result.ok || result.samples.length === 0) {
+          return { ok: false, doc: null, errorMessage: result.errorMessage || "Nenhum documento encontrado" };
+        }
+        return { ok: true, doc: result.samples[0], errorMessage: undefined };
+      }),
+
     index: protectedProcedure
       .input(z.object({
         indexType: indexTypeSchema,

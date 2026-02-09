@@ -21,6 +21,7 @@ export default function Explore() {
   const exploreIndexMutation = trpc.explore.index.useMutation();
   const exploreFieldMutation = trpc.explore.fieldValues.useMutation();
   const exploreMappingMutation = trpc.explore.mapping.useMutation();
+  const sampleDocMutation = trpc.explore.sampleDoc.useMutation();
 
   const handleExploreIndex = async () => {
     await exploreIndexMutation.mutateAsync({ indexType, size: 10 });
@@ -68,7 +69,7 @@ export default function Explore() {
       </Card>
 
       <Tabs defaultValue="samples">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="samples">
             <Database className="w-4 h-4 mr-2" />
             Amostras
@@ -80,6 +81,10 @@ export default function Explore() {
           <TabsTrigger value="mapping">
             <FileJson className="w-4 h-4 mr-2" />
             Mapping (Schema)
+          </TabsTrigger>
+          <TabsTrigger value="debug">
+            <Database className="w-4 h-4 mr-2" />
+            Debug (1 Doc)
           </TabsTrigger>
         </TabsList>
 
@@ -228,6 +233,40 @@ export default function Explore() {
                   ) : (
                     <Alert variant="destructive">
                       <AlertDescription>{exploreMappingMutation.data.errorMessage}</AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="debug" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Documento de Amostra (Debug)</CardTitle>
+              <CardDescription>
+                Busca 1 documento completo do índice para ver TODOS os campos e valores reais
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button onClick={async () => await sampleDocMutation.mutateAsync({ indexType })} disabled={sampleDocMutation.isPending}>
+                {sampleDocMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Buscar 1 Documento
+              </Button>
+
+              {sampleDocMutation.data && (
+                <div className="space-y-4">
+                  {sampleDocMutation.data.ok ? (
+                    <div>
+                      <h3 className="font-semibold mb-2">Documento Completo (JSON)</h3>
+                      <div className="bg-muted p-4 rounded-md max-h-[600px] overflow-auto">
+                        <pre className="text-xs">{JSON.stringify(sampleDocMutation.data.doc, null, 2)}</pre>
+                      </div>
+                    </div>
+                  ) : (
+                    <Alert variant="destructive">
+                      <AlertDescription>{sampleDocMutation.data.errorMessage}</AlertDescription>
                     </Alert>
                   )}
                 </div>
