@@ -16,6 +16,7 @@ import {
   deleteFieldSelection,
 } from "./db";
 import { executeSisregSearch, testSisregConnection } from "./sisreg";
+import { exploreIndex, exploreFieldValues, exploreMapping } from "./explore-index";
 import { IndexType, QueryMode } from "../shared/sisreg";
 import { invokeLLM } from "./_core/llm";
 import * as XLSX from "xlsx";
@@ -93,6 +94,72 @@ export const appRouter = router({
           username: config.username,
           password,
         });
+      }),
+  }),
+
+  // SISREG Exploration (para descobrir campos e valores)
+  explore: router({
+    index: protectedProcedure
+      .input(z.object({
+        indexType: indexTypeSchema,
+        size: z.number().min(1).max(100).default(10),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config = await getSisregConfig(ctx.user.id);
+        if (!config) {
+          return { ok: false, total: 0, samples: [], fields: [], errorMessage: "Configuração não encontrada." };
+        }
+        const password = decryptPassword(config.encryptedPassword);
+        const indexPath = input.indexType === "marcacao" 
+          ? "/marcacao-ambulatorial-rj-macae/_search"
+          : "/solicitacao-ambulatorial-rj-macae/_search";
+        return exploreIndex(
+          { baseUrl: config.baseUrl, username: config.username, password },
+          indexPath,
+          input.size
+        );
+      }),
+
+    fieldValues: protectedProcedure
+      .input(z.object({
+        indexType: indexTypeSchema,
+        fieldName: z.string(),
+        size: z.number().min(1).max(1000).default(100),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config = await getSisregConfig(ctx.user.id);
+        if (!config) {
+          return { ok: false, values: [], errorMessage: "Configuração não encontrada." };
+        }
+        const password = decryptPassword(config.encryptedPassword);
+        const indexPath = input.indexType === "marcacao" 
+          ? "/marcacao-ambulatorial-rj-macae/_search"
+          : "/solicitacao-ambulatorial-rj-macae/_search";
+        return exploreFieldValues(
+          { baseUrl: config.baseUrl, username: config.username, password },
+          indexPath,
+          input.fieldName,
+          input.size
+        );
+      }),
+
+    mapping: protectedProcedure
+      .input(z.object({
+        indexType: indexTypeSchema,
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config = await getSisregConfig(ctx.user.id);
+        if (!config) {
+          return { ok: false, mapping: {}, errorMessage: "Configuração não encontrada." };
+        }
+        const password = decryptPassword(config.encryptedPassword);
+        const indexName = input.indexType === "marcacao" 
+          ? "marcacao-ambulatorial-rj-macae"
+          : "solicitacao-ambulatorial-rj-macae";
+        return exploreMapping(
+          { baseUrl: config.baseUrl, username: config.username, password },
+          indexName
+        );
       }),
   }),
 
