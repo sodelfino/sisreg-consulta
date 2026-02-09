@@ -223,14 +223,6 @@ function buildQuerySolicitacaoAmbulatorial(
           { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
           { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
           { match: { "descricao_interna_procedimento": { query: searchTerm, fuzziness: "AUTO" } } },
-          // Busca em descricao_sigtap_procedimento
-          { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
-          { match: { "descricao_sigtap_procedimento": { query: searchTerm, fuzziness: "AUTO" } } },
-          // Busca em nome_grupo_procedimento
-          { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
-          { match: { "nome_grupo_procedimento": { query: searchTerm, fuzziness: "AUTO" } } },
           // Busca em codigo_interno_procedimento (exato)
           { term: { "codigo_interno_procedimento": searchTerm } },
         ],

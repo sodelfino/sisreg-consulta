@@ -32,3 +32,10 @@
 - [x] Corrigir filtro de busca para usar exclusivamente descricao_interna_procedimento com match parcial
 - [ ] Validar que coluna aparece preenchida sem filtro (requer teste com credenciais reais)
 - [ ] Validar que busca por "CARDIO", "CONSULTA", "ELETRO" retorna resultados (requer teste com credenciais reais)
+
+## Correção de Fallback Indevido em Descrição Procedimento
+- [x] Corrigir formatCellValue para usar apenas descricao_interna_procedimento ou codigo_interno_procedimento
+- [x] Remover nome_grupo_procedimento e descricao_sigtap_procedimento do fallback de descrição
+- [x] Garantir que Nome Grupo Procedimento seja coluna separada
+- [x] Ajustar filtro de busca para não usar nome_grupo_procedimento
+- [x] Validar que descrição não mostra grupo quando vazia
