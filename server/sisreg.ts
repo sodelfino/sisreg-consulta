@@ -177,20 +177,21 @@ function buildQuerySolicitacaoAmbulatorial(
 
   const mustClauses: Record<string, unknown>[] = [];
 
-  // FILTRO OBRIGATÓRIO: centrais reguladoras de Macaé
-  // Tenta com e sem .keyword para compatibilidade (usa should para aceitar qualquer um)
-  mustClauses.push({
-    bool: {
-      should: [
-        { terms: { "codigo_central_reguladora": CENTRAIS_REGULADORAS_MACAE } },
-        { terms: { "codigo_central_reguladora.keyword": CENTRAIS_REGULADORAS_MACAE } },
-      ],
-      minimum_should_match: 1,
-    },
-  });
-
-  // REMOVIDO: Filtro de status que estava impedindo resultados
-  // Agora permite consultar todas as solicitações das centrais de Macaé
+  // REMOVIDO: Filtro obrigatório de centrais reguladoras
+  // Agora permite consultar TODAS as solicitações sem restrição
+  
+  // Filtro OPCIONAL de central reguladora (se fornecido pelo usuário)
+  if (_codigoCentralReguladora && _codigoCentralReguladora.length > 0) {
+    mustClauses.push({
+      bool: {
+        should: [
+          { terms: { "codigo_central_reguladora": _codigoCentralReguladora } },
+          { terms: { "codigo_central_reguladora.keyword": _codigoCentralReguladora } },
+        ],
+        minimum_should_match: 1,
+      },
+    });
+  }
 
   // Optional date range (end-exclusive: lt nextDay para incluir o último dia inteiro)
   if (dateStart && dateEnd) {
@@ -228,7 +229,14 @@ function buildQuerySolicitacaoAmbulatorial(
     });
   }
 
-  query.query = { bool: { must: mustClauses } };
+  // Criar query apenas se houver filtros
+  if (mustClauses.length > 0) {
+    query.query = { bool: { must: mustClauses } };
+  } else {
+    // Sem filtros: match_all para retornar todos os documentos
+    query.query = { match_all: {} };
+  }
+  
   return query;
 }
 
@@ -329,21 +337,62 @@ export async function executeSisregSearch(
 
 /**
  * Test SISREG connection with credentials
+ * Testa ambos os índices: marcação e solicitação
  */
-export async function testSisregConnection(credentials: SisregCredentials): Promise<{ ok: boolean; message: string }> {
+export async function testSisregConnection(
+  credentials: SisregCredentials,
+  indexType?: "marcacao" | "solicitacao"
+): Promise<{ ok: boolean; message: string; details?: { marcacao?: string; solicitacao?: string } }> {
   try {
-    const result = await executeSisregSearch(credentials, {
+    // Se indexType especificado, testa apenas esse
+    if (indexType) {
+      const result = await executeSisregSearch(credentials, {
+        indexType,
+        mode: indexType === "marcacao" ? "quick" : "fila",
+        size: 1,
+        from: 0,
+      });
+
+      if (result.ok) {
+        return { 
+          ok: true, 
+          message: `${indexType === "marcacao" ? "Marcação" : "Solicitação"} Ambulatorial: ${result.total} registros encontrados` 
+        };
+      } else {
+        return { ok: false, message: result.errorMessage || "Falha na conexão" };
+      }
+    }
+
+    // Testa ambos os índices
+    const marcacaoResult = await executeSisregSearch(credentials, {
       indexType: "marcacao",
       mode: "quick",
       size: 1,
       from: 0,
     });
 
-    if (result.ok) {
-      return { ok: true, message: "Conexão estabelecida com sucesso!" };
-    } else {
-      return { ok: false, message: result.errorMessage || "Falha na conexão" };
-    }
+    const solicitacaoResult = await executeSisregSearch(credentials, {
+      indexType: "solicitacao",
+      mode: "fila",
+      size: 1,
+      from: 0,
+    });
+
+    const details = {
+      marcacao: marcacaoResult.ok 
+        ? `✅ ${marcacaoResult.total.toLocaleString("pt-BR")} registros` 
+        : `❌ ${marcacaoResult.errorMessage}`,
+      solicitacao: solicitacaoResult.ok 
+        ? `✅ ${solicitacaoResult.total.toLocaleString("pt-BR")} registros` 
+        : `❌ ${solicitacaoResult.errorMessage}`,
+    };
+
+    const bothOk = marcacaoResult.ok && solicitacaoResult.ok;
+    const message = bothOk
+      ? "Conexão estabelecida com sucesso em ambos os índices!"
+      : "Conexão parcial ou com erros. Veja detalhes.";
+
+    return { ok: bothOk, message, details };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Erro desconhecido" };
   }
