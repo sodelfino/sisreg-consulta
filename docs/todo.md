@@ -44,3 +44,9 @@
 - [x] Criar relatório de validação com cenários de teste
 - [x] Validar formatação de descrição de procedimento via testes unitários
 - [x] Documentar resultados do teste (VALIDACAO_DESCRICAO_PROCEDIMENTO.md)
+
+## URGENTE: Descobrir Campo Real de Descrição Procedimento
+- [x] Adicionar TODOS os campos possíveis de descrição ao _source
+- [x] Implementar fallback em cascata para tentar todos os campos
+- [x] Atualizar filtro de busca para buscar em todos os campos possíveis
+- [ ] Testar com dados reais para validar que descrição aparece

@@ -136,6 +136,10 @@ export const DEFAULT_FIELDS_SOLICITACAO = {
     "descricao_sigtap_procedimento",
     "nome_grupo_procedimento",
     "codigo_grupo_procedimento",
+    // Campos alternativos de descrição (tentar todos)
+    "descricao_procedimento",
+    "nome_procedimento",
+    "procedimento",
     "codigo_tipo_regulacao",
     "codigo_classificacao_risco",
     "cns_usuario",
