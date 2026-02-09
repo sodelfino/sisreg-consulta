@@ -1,4 +1,6 @@
+# TODO - SISREG Consulta
 
+## Concluído
 - [x] Corrigir query de Solicitações Ambulatoriais para retornar resultados reais com filtros de status corretos
 - [x] Investigar índice solicitacao-ambulatorial-rj-macae para descobrir campos e valores reais
 - [x] Remover filtros restritivos de status que impedem resultados
@@ -9,6 +11,7 @@
 - [x] Permitir consulta completamente livre sem filtros obrigatórios
 - [x] Corrigir campo Descrição Procedimento que está vindo vazio em Solicitações Ambulatoriais
 - [x] Criar ferramenta de debug para ver documento completo do Elasticsearch
-- [ ] Descobrir campo correto de descrição de procedimento no índice de Solicitações (usar /explore > Debug)
-- [ ] Corrigir exibição de descrição de procedimento para usar campo correto
-- [ ] Implementar busca parcial por descrição de procedimento (match parcial)
+- [x] Adicionar descricao_sigtap_procedimento e nome_grupo_procedimento ao _source
+- [x] Implementar fallback inteligente para descrição de procedimento (3 níveis)
+- [x] Melhorar filtro de busca por procedimento com busca parcial em múltiplos campos
+- [x] Criar testes para validar busca de procedimento e fallback

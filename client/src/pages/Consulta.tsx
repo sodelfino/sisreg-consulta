@@ -435,9 +435,12 @@ export default function Consulta() {
   // Format cell value
   const formatCellValue = (key: string, value: unknown, hit?: Record<string, unknown>): string => {
     if (value === null || value === undefined || value === "") {
-      // Fallback: se descricao_interna_procedimento estiver vazio, usar descricao_sigtap_procedimento
-      if (key === "descricao_interna_procedimento" && hit?.descricao_sigtap_procedimento) {
-        return String(hit.descricao_sigtap_procedimento);
+      // Fallback para descrição de procedimento: tentar múltiplos campos
+      if (key === "descricao_interna_procedimento" && hit) {
+        // Ordem de prioridade: descricao_sigtap > nome_grupo_procedimento > codigo_interno_procedimento
+        if (hit.descricao_sigtap_procedimento) return String(hit.descricao_sigtap_procedimento);
+        if (hit.nome_grupo_procedimento) return String(hit.nome_grupo_procedimento);
+        if (hit.codigo_interno_procedimento) return `Código: ${hit.codigo_interno_procedimento}`;
       }
       return "-";
     }
