@@ -50,3 +50,10 @@
 - [x] Implementar fallback em cascata para tentar todos os campos
 - [x] Atualizar filtro de busca para buscar em todos os campos possíveis
 - [ ] Testar com dados reais para validar que descrição aparece
+
+## Investigação com Credenciais Reais
+- [x] Acessar API SISREG com credenciais fornecidas
+- [x] Buscar 1 documento de amostra do índice solicitacao-ambulatorial-rj-macae
+- [x] Identificar qual campo realmente contém descrição do procedimento (procedimentos[0].descricao_interna)
+- [x] Atualizar código para usar campo correto (procedimentos array)
+- [x] Validar que descrição aparece na interface (5 testes unitários passaram)

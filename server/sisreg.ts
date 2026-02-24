@@ -219,7 +219,14 @@ function buildQuerySolicitacaoAmbulatorial(
     mustClauses.push({
       bool: {
         should: [
-          // Busca em descricao_interna_procedimento
+          // CAMPO REAL: procedimentos.descricao_interna (nested)
+          { wildcard: { "procedimentos.descricao_interna": `*${searchTerm}*` } },
+          { match_phrase_prefix: { "procedimentos.descricao_interna": searchTerm } },
+          { match: { "procedimentos.descricao_interna": { query: searchTerm, fuzziness: "AUTO" } } },
+          { wildcard: { "procedimentos.descricao_sigtap": `*${searchTerm}*` } },
+          { match_phrase_prefix: { "procedimentos.descricao_sigtap": searchTerm } },
+          { term: { "procedimentos.codigo_interno": searchTerm } },
+          // Busca em descricao_interna_procedimento (fallback para outros índices)
           { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
           { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
           { match: { "descricao_interna_procedimento": { query: searchTerm, fuzziness: "AUTO" } } },

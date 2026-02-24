@@ -136,6 +136,8 @@ export const DEFAULT_FIELDS_SOLICITACAO = {
     "descricao_sigtap_procedimento",
     "nome_grupo_procedimento",
     "codigo_grupo_procedimento",
+    // Campo REAL que contém descrição (array de objetos)
+    "procedimentos",
     // Campos alternativos de descrição (tentar todos)
     "descricao_procedimento",
     "nome_procedimento",

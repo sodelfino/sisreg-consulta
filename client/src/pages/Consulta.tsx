@@ -437,7 +437,14 @@ export default function Consulta() {
     if (value === null || value === undefined || value === "") {
       // Fallback para descrição de procedimento: tentar TODOS os campos possíveis
       if (key === "descricao_interna_procedimento" && hit) {
-        // Ordem de prioridade: tentar todos os campos até encontrar um preenchido
+        // CAMPO REAL: procedimentos[0].descricao_interna (array de objetos)
+        if (hit.procedimentos && Array.isArray(hit.procedimentos) && hit.procedimentos.length > 0) {
+          const proc = hit.procedimentos[0] as Record<string, unknown>;
+          if (proc.descricao_interna) return String(proc.descricao_interna);
+          if (proc.descricao_sigtap) return String(proc.descricao_sigtap);
+          if (proc.codigo_interno) return `Código: ${proc.codigo_interno}`;
+        }
+        // Fallback para campos flat (caso existam em outros índices)
         if (hit.descricao_procedimento) return String(hit.descricao_procedimento);
         if (hit.nome_procedimento) return String(hit.nome_procedimento);
         if (hit.procedimento) return String(hit.procedimento);
