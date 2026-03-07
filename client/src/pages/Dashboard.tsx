@@ -161,6 +161,12 @@ export default function Dashboard() {
     { enabled: isAuthenticated && indexType === "solicitacao" }
   );
 
+  // Listar procedimentos disponíveis para filtro
+  const procedimentosList = trpc.metrics.listProcedimentos.useQuery(
+    { dateStart, dateEnd },
+    { enabled: isAuthenticated && indexType === "solicitacao" }
+  );
+
   // Load dashboard data
   const handleLoadDashboard = () => {
     if (!configQuery.data) {
@@ -239,12 +245,17 @@ export default function Dashboard() {
 
   // Filter procedimentos for selection
   const filteredProcedimentos = useMemo(() => {
-    if (!aggregateMutation.data?.data?.allProcedimentos) return [];
+    const procedimentosData = procedimentosList.data?.ok ? procedimentosList.data.data : [];
+    const allProcedimentos: string[] = procedimentosData.length > 0 
+      ? procedimentosData.map((p: any) => p.label)
+      : (aggregateMutation.data?.data?.allProcedimentos || []);
+    
+    if (!allProcedimentos.length) return [];
     const search = procedimentoSearch.toLowerCase();
-    return aggregateMutation.data.data.allProcedimentos.filter(
-      (p) => p.toLowerCase().includes(search)
+    return allProcedimentos.filter(
+      (p: string) => p.toLowerCase().includes(search)
     );
-  }, [aggregateMutation.data?.data?.allProcedimentos, procedimentoSearch]);
+  }, [procedimentosList.data, aggregateMutation.data?.data?.allProcedimentos, procedimentoSearch]);
 
   // Toggle procedimento selection
   const toggleProcedimento = (proc: string) => {

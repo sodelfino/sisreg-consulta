@@ -57,3 +57,11 @@
 - [x] Identificar qual campo realmente contém descrição do procedimento (procedimentos[0].descricao_interna)
 - [x] Atualizar código para usar campo correto (procedimentos array)
 - [x] Validar que descrição aparece na interface (5 testes unitários passaram)
+
+
+## Filtro Multi-Select de Procedimentos no Dashboard
+- [x] Criar endpoint listProcedimentos para listar procedimentos únicos
+- [x] Adicionar query procedimentosList ao Dashboard
+- [x] Atualizar filtro para usar listProcedimentos com fallback
+- [x] Criar testes para validar extração de procedimentos (4 testes passaram)
+- [ ] Testar filtro com dados reais e validar que métricas refletem seleção

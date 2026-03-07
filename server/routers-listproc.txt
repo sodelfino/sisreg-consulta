@@ -1,0 +1,57 @@
+    // Listar procedimentos únicos disponíveis para filtro
+    listProcedimentos: protectedProcedure
+      .input(z.object({
+        dateStart: z.string().optional(),
+        dateEnd: z.string().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        try {
+          const config = await getSisregConfig(ctx.user.id);
+          if (!config) {
+            return { ok: false, data: [], error: "Credenciais SISREG não configuradas" };
+          }
+
+          const credentials = {
+            baseUrl: config.baseUrl,
+            username: config.username,
+            password: decryptPassword(config.encryptedPassword),
+          };
+
+          // Buscar todas as solicitações na fila
+          const result = await executeSisregSearch(credentials, {
+            indexType: "solicitacao",
+            mode: "fila",
+            size: 10000,
+            from: 0,
+            dateStart: input.dateStart,
+            dateEnd: input.dateEnd,
+          });
+
+          if (!result.ok) {
+            return { ok: false, data: [], error: result.errorMessage };
+          }
+
+          // Extrair procedimentos únicos
+          const procedimentosSet = new Set<string>();
+          result.hits.forEach((hit: any) => {
+            // Extrair de procedimentos array (campo real)
+            if (hit.procedimentos && Array.isArray(hit.procedimentos) && hit.procedimentos.length > 0) {
+              const proc = hit.procedimentos[0];
+              if (proc.descricao_interna) {
+                procedimentosSet.add(proc.descricao_interna);
+              } else if (proc.descricao_sigtap) {
+                procedimentosSet.add(proc.descricao_sigtap);
+              }
+            }
+          });
+
+          const data = Array.from(procedimentosSet)
+            .sort((a, b) => a.localeCompare(b))
+            .map(descricao => ({ value: descricao, label: descricao }));
+
+          return { ok: true, data, error: null };
+        } catch (error) {
+          console.error("[Metrics] Error listing procedures:", error);
+          return { ok: false, data: [], error: "Erro ao listar procedimentos" };
+        }
+      }),
