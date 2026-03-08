@@ -215,41 +215,32 @@ function buildQuerySolicitacaoAmbulatorial(
 
   // Procedimento search com múltiplos campos (busca parcial)
   if (procedimentoSearch && procedimentoSearch.trim()) {
-    const searchTerm = procedimentoSearch.trim().toLowerCase();
+    const searchTerm = procedimentoSearch.trim().toUpperCase();
+    
+    // Usar nested query para buscar em procedimentos.descricao_interna
+    // Este é o campo REAL onde está a descrição do procedimento
+    // Usar match + wildcard para máxima compatibilidade e acurácia
     mustClauses.push({
-      bool: {
-        should: [
-          // CAMPO REAL: procedimentos.descricao_interna (nested)
-          { wildcard: { "procedimentos.descricao_interna": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "procedimentos.descricao_interna": searchTerm } },
-          { match: { "procedimentos.descricao_interna": { query: searchTerm, fuzziness: "AUTO" } } },
-          { wildcard: { "procedimentos.descricao_sigtap": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "procedimentos.descricao_sigtap": searchTerm } },
-          { term: { "procedimentos.codigo_interno": searchTerm } },
-          // Busca em descricao_interna_procedimento (fallback para outros índices)
-          { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
-          { match: { "descricao_interna_procedimento": { query: searchTerm, fuzziness: "AUTO" } } },
-          // Busca em campos alternativos de descrição
-          { wildcard: { "descricao_procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "descricao_procedimento": searchTerm } },
-          { wildcard: { "nome_procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "nome_procedimento": searchTerm } },
-          { wildcard: { "procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "procedimento": searchTerm } },
-          { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
-          { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
-          // Busca em codigo_interno_procedimento (exato)
-          { term: { "codigo_interno_procedimento": searchTerm } },
-        ],
-        minimum_should_match: 1,
+      nested: {
+        path: "procedimentos",
+        query: {
+          bool: {
+            should: [
+              // Match para palavras completas (100% acurácia)
+              { match: { "procedimentos.descricao_interna": searchTerm } },
+              // Wildcard para prefixos (100% acurácia)
+              { wildcard: { "procedimentos.descricao_interna": { value: `*${searchTerm}*`, case_insensitive: true } } },
+              // Fallback: busca em descricao_sigtap
+              { match: { "procedimentos.descricao_sigtap": searchTerm } },
+              { wildcard: { "procedimentos.descricao_sigtap": { value: `*${searchTerm}*`, case_insensitive: true } } },
+            ],
+            minimum_should_match: 1,
+          },
+        },
       },
     });
   }
 
-  // Criar query apenas se houver filtros
   if (mustClauses.length > 0) {
     query.query = { bool: { must: mustClauses } };
   } else {

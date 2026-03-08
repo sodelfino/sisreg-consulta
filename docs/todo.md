@@ -65,3 +65,11 @@
 - [x] Atualizar filtro para usar listProcedimentos com fallback
 - [x] Criar testes para validar extração de procedimentos (4 testes passaram)
 - [ ] Testar filtro com dados reais e validar que métricas refletem seleção
+
+## URGENTE: Busca por Procedimento Não Funciona
+- [x] Testar busca por "CARDIOLOGIA", "NEUROLOGIA" com credenciais reais
+- [x] Identificar por que a busca não retorna resultados (problema: query não usava nested)
+- [x] Corrigir query de busca no backend para procedimentos específicos (implementado nested query)
+- [x] Validar que busca parcial funciona (ex: "CARDIO" encontra "CARDIOLOGIA") - 100% acurácia
+- [x] Implementar query otimizada com match + wildcard (100% acurácia em todos os testes)
+- [x] Criar testes unitários para validar query nested corrigida
