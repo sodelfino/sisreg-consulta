@@ -73,3 +73,16 @@
 - [x] Validar que busca parcial funciona (ex: "CARDIO" encontra "CARDIOLOGIA") - 100% acurácia
 - [x] Implementar query otimizada com match + wildcard (100% acurácia em todos os testes)
 - [x] Criar testes unitários para validar query nested corrigida
+
+## Correção: Busca de Procedimentos Retorna Muitos Resultados
+- [x] Diagnosticar problema: busca por "CONSULTA EM CARDIOLOGIA" retorna tudo que começa com "CONSULTA"
+- [x] Testar diferentes estratégias de busca (match_phrase, match_phrase_prefix com limite)
+- [x] Implementar busca que retorna variações do termo (ex: "CONSULTA EM CARDIOLOGIA - ADULTO") - 100% acurácia
+- [x] Criar testes unitários para validar nova query (10 testes passaram)
+- [x] Validar com dados reais (4/4 testes com 100% de acurácia)
+
+## Correção: Exportação Excel com Múltiplos Campos
+- [ ] Investigar erro ao exportar com nome, telefone e descrição da especialidade
+- [ ] Validar se campos estão no _source do Elasticsearch
+- [ ] Corrigir mapeamento de campos no frontend
+- [ ] Testar exportação com diferentes combinações de campos

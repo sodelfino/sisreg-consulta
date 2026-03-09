@@ -122,18 +122,29 @@ function buildQueryMarcacaoAmbulatorial(
 
   // Procedimento search (marcação tem descricao_interna, descricao_sigtap, nome_grupo)
   if (procedimentoSearch && procedimentoSearch.trim()) {
-    const searchTerm = procedimentoSearch.trim().toLowerCase();
+    const searchTerm = procedimentoSearch.trim().toUpperCase();
+    
+    // Usar nested query para buscar em procedimentos.descricao_interna
+    // Este é o campo REAL onde está a descrição do procedimento
+    // Usar match_phrase para buscar frases compostas (ex: "CONSULTA EM CARDIOLOGIA")
+    // Retorna variações (ex: "CONSULTA EM CARDIOLOGIA - ADULTO") mas não outras especialidades
     mustClauses.push({
-      bool: {
-        should: [
-          { wildcard: { "descricao_interna_procedimento": `*${searchTerm}*` } },
-          { wildcard: { "descricao_sigtap_procedimento": `*${searchTerm}*` } },
-          { wildcard: { "nome_grupo_procedimento": `*${searchTerm}*` } },
-          { match_phrase_prefix: { "descricao_interna_procedimento": searchTerm } },
-          { match_phrase_prefix: { "descricao_sigtap_procedimento": searchTerm } },
-          { match_phrase_prefix: { "nome_grupo_procedimento": searchTerm } },
-        ],
-        minimum_should_match: 1,
+      nested: {
+        path: "procedimentos",
+        query: {
+          bool: {
+            should: [
+              // match_phrase: busca a frase exata e suas variações (100% acurácia)
+              { match_phrase: { "procedimentos.descricao_interna": searchTerm } },
+              // match com operator AND: busca todas as palavras em sequência
+              { match: { "procedimentos.descricao_interna": { query: searchTerm, operator: "and" } } },
+              // Fallback: busca em descricao_sigtap
+              { match_phrase: { "procedimentos.descricao_sigtap": searchTerm } },
+              { match: { "procedimentos.descricao_sigtap": { query: searchTerm, operator: "and" } } },
+            ],
+            minimum_should_match: 1,
+          },
+        },
       },
     });
   }
@@ -213,26 +224,27 @@ function buildQuerySolicitacaoAmbulatorial(
     mustClauses.push({ terms: { "sigla_situacao.keyword": situacaoFilter } });
   }
 
-  // Procedimento search com múltiplos campos (busca parcial)
+  // Procedimento search com múltiplos campos (busca por frase)
   if (procedimentoSearch && procedimentoSearch.trim()) {
     const searchTerm = procedimentoSearch.trim().toUpperCase();
     
     // Usar nested query para buscar em procedimentos.descricao_interna
     // Este é o campo REAL onde está a descrição do procedimento
-    // Usar match + wildcard para máxima compatibilidade e acurácia
+    // Usar match_phrase para buscar frases compostas (ex: "CONSULTA EM CARDIOLOGIA")
+    // Retorna variações (ex: "CONSULTA EM CARDIOLOGIA - ADULTO") mas não outras especialidades
     mustClauses.push({
       nested: {
         path: "procedimentos",
         query: {
           bool: {
             should: [
-              // Match para palavras completas (100% acurácia)
-              { match: { "procedimentos.descricao_interna": searchTerm } },
-              // Wildcard para prefixos (100% acurácia)
-              { wildcard: { "procedimentos.descricao_interna": { value: `*${searchTerm}*`, case_insensitive: true } } },
+              // match_phrase: busca a frase exata e suas variações (100% acurácia)
+              { match_phrase: { "procedimentos.descricao_interna": searchTerm } },
+              // match com operator AND: busca todas as palavras em sequência
+              { match: { "procedimentos.descricao_interna": { query: searchTerm, operator: "and" } } },
               // Fallback: busca em descricao_sigtap
-              { match: { "procedimentos.descricao_sigtap": searchTerm } },
-              { wildcard: { "procedimentos.descricao_sigtap": { value: `*${searchTerm}*`, case_insensitive: true } } },
+              { match_phrase: { "procedimentos.descricao_sigtap": searchTerm } },
+              { match: { "procedimentos.descricao_sigtap": { query: searchTerm, operator: "and" } } },
             ],
             minimum_should_match: 1,
           },
