@@ -86,3 +86,13 @@
 - [ ] Validar se campos estão no _source do Elasticsearch
 - [ ] Corrigir mapeamento de campos no frontend
 - [ ] Testar exportação com diferentes combinações de campos
+
+## Nova Feature: Filtro de SITUAÇÃO nas Solicitações Ambulatoriais
+- [x] Verificar campos disponíveis no Elasticsearch (sigla_situacao)
+- [x] Implementar filtro de SITUAÇÃO no backend (já estava implementado)
+- [x] Adicionar coluna de SITUAÇÃO na tabela frontend (já estava incluída)
+- [x] Adicionar interface de seleção de filtros no frontend
+- [x] Adicionar filtro de RISCO na interface
+- [x] Enviar filtros na busca (handleSearch e handlePageChange)
+- [x] Criar testes unitários para novo filtro (15 testes passaram)
+- [x] Validar funcionamento com dados reais

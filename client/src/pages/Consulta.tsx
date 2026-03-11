@@ -86,6 +86,8 @@ export default function Consulta() {
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
   const [procedimentoSearch, setProcedimentoSearch] = useState("");
+  const [situacaoFilter, setSituacaoFilter] = useState<string[]>([]);
+  const [riscoFilter, setRiscoFilter] = useState<string[]>([]);
 
   // Results state
   const [results, setResults] = useState<SearchResult | null>(null);
@@ -172,6 +174,8 @@ export default function Consulta() {
         dateEnd: dateEnd || undefined,
         selectedFields: selectedFields.length > 0 ? selectedFields : undefined,
         procedimentoSearch: procedimentoSearch.trim() || undefined,
+        situacaoFilter: situacaoFilter.length > 0 ? situacaoFilter : undefined,
+        riscoFilter: riscoFilter.length > 0 ? riscoFilter : undefined,
       });
     } finally {
       setIsSearching(false);
@@ -190,6 +194,8 @@ export default function Consulta() {
       dateEnd: dateEnd || undefined,
       selectedFields: selectedFields.length > 0 ? selectedFields : undefined,
       procedimentoSearch: procedimentoSearch.trim() || undefined,
+      situacaoFilter: situacaoFilter.length > 0 ? situacaoFilter : undefined,
+      riscoFilter: riscoFilter.length > 0 ? riscoFilter : undefined,
     });
   };
 
@@ -693,6 +699,60 @@ export default function Consulta() {
                     Busca parcial por descrição ou nome do procedimento
                   </p>
                 </div>
+
+                {/* Situação Filter - Solicitações apenas */}
+                {indexType === "solicitacao" && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">Filtrar por Situação</Label>
+                    <div className="space-y-2">
+                      {Object.entries(SITUACAO_LABELS).map(([key, label]) => (
+                        <div key={key} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`situacao-${key}`}
+                            checked={situacaoFilter.includes(key)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSituacaoFilter([...situacaoFilter, key]);
+                              } else {
+                                setSituacaoFilter(situacaoFilter.filter(s => s !== key));
+                              }
+                            }}
+                          />
+                          <label htmlFor={`situacao-${key}`} className="text-xs cursor-pointer">
+                            {label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Risco Filter - Solicitações apenas */}
+                {indexType === "solicitacao" && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">Filtrar por Risco</Label>
+                    <div className="space-y-2">
+                      {Object.entries(RISK_LABELS).map(([key, label]) => (
+                        <div key={key} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`risco-${key}`}
+                            checked={riscoFilter.includes(key)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setRiscoFilter([...riscoFilter, key]);
+                              } else {
+                                setRiscoFilter(riscoFilter.filter(r => r !== key));
+                              }
+                            }}
+                          />
+                          <label htmlFor={`risco-${key}`} className="text-xs cursor-pointer">
+                            {label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Size */}
                 <div className="space-y-1">
