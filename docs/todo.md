@@ -96,3 +96,13 @@
 - [x] Enviar filtros na busca (handleSearch e handlePageChange)
 - [x] Criar testes unitários para novo filtro (15 testes passaram)
 - [x] Validar funcionamento com dados reais
+
+## Nova Feature: Dashboard com Métricas Acumuladas (Últimos 3 Anos)
+- [x] Criar procedure tRPC para buscar métricas por status (metricsAccumulated)
+- [x] Implementar card para SOLICITAÇÃO / PENDENTE / FILA DE ESPERA (azul)
+- [x] Implementar card para SOLICITAÇÃO / PENDENTE / REGULADOR (âmbar)
+- [x] Implementar card para SOLICITAÇÃO / AGENDADA / FILA DE ESPERA (verde)
+- [x] Filtrar apenas procedimentos com "CONSULTA EM"
+- [x] Calcular período dos últimos 3 anos automaticamente
+- [x] Criar testes unitários para métricas (12 testes passaram)
+- [x] Validar dados com período correto

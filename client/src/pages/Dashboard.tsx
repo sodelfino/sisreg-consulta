@@ -136,6 +136,29 @@ export default function Dashboard() {
     },
   });
 
+  // Métricas acumuladas para 3 status específicos
+  const metricsFilaEsperaMutation = trpc.dashboard.metricsAccumulated.useMutation();
+  const metricsReguladoMutation = trpc.dashboard.metricsAccumulated.useMutation();
+  const metricsAgendadaMutation = trpc.dashboard.metricsAccumulated.useMutation();
+
+  // Carregar métricas quando o dashboard é aberto
+  useEffect(() => {
+    if (isAuthenticated && configQuery.data) {
+      metricsFilaEsperaMutation.mutate({
+        statusFilter: ["SOLICITAÇÃO / PENDENTE / FILA DE ESPERA"],
+        procedimentoSearch: "CONSULTA EM",
+      });
+      metricsReguladoMutation.mutate({
+        statusFilter: ["SOLICITAÇÃO / PENDENTE / REGULADOR"],
+        procedimentoSearch: "CONSULTA EM",
+      });
+      metricsAgendadaMutation.mutate({
+        statusFilter: ["SOLICITAÇÃO / AGENDADA / FILA DE ESPERA"],
+        procedimentoSearch: "CONSULTA EM",
+      });
+    }
+  }, [isAuthenticated, configQuery.data]);
+
   // LLM insights mutation
   const insightsMutation = trpc.insights.generate.useMutation({
     onSuccess: (data) => {
@@ -591,6 +614,100 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Métricas Acumuladas - Últimos 3 Anos */}
+            {indexType === "solicitacao" && (
+              <div className="mb-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-primary" />
+                  <h2 className="text-sm font-semibold">Período Acumulado (3 Anos) - Procedimentos "CONSULTA EM"</h2>
+                </div>
+
+                {/* Cards de Métricas Acumuladas */}
+                <div className="grid gap-3 grid-cols-1 lg:grid-cols-3">
+                  {/* FILA DE ESPERA */}
+                  <Card>
+                    <CardHeader className="pb-2 pt-3 px-4">
+                      <CardTitle className="text-xs">SOLICITAÇÃO / PENDENTE / FILA DE ESPERA</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3">
+                      {metricsFilaEsperaMutation.isPending ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="text-xs">Carregando...</span>
+                        </div>
+                      ) : metricsFilaEsperaMutation.data?.ok ? (
+                        <>
+                          <div className="text-2xl font-bold text-blue-600">
+                            {metricsFilaEsperaMutation.data.data?.totalAccumulated.toLocaleString("pt-BR")}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1">Total acumulado</p>
+                          <p className="text-[10px] text-muted-foreground mt-2">
+                            Período: {metricsFilaEsperaMutation.data.data?.dateStart} a {metricsFilaEsperaMutation.data.data?.dateEnd}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-red-500">Erro ao carregar</p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* REGULADOR */}
+                  <Card>
+                    <CardHeader className="pb-2 pt-3 px-4">
+                      <CardTitle className="text-xs">SOLICITAÇÃO / PENDENTE / REGULADOR</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3">
+                      {metricsReguladoMutation.isPending ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="text-xs">Carregando...</span>
+                        </div>
+                      ) : metricsReguladoMutation.data?.ok ? (
+                        <>
+                          <div className="text-2xl font-bold text-amber-600">
+                            {metricsReguladoMutation.data.data?.totalAccumulated.toLocaleString("pt-BR")}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1">Total acumulado</p>
+                          <p className="text-[10px] text-muted-foreground mt-2">
+                            Período: {metricsReguladoMutation.data.data?.dateStart} a {metricsReguladoMutation.data.data?.dateEnd}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-red-500">Erro ao carregar</p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* AGENDADA FILA DE ESPERA */}
+                  <Card>
+                    <CardHeader className="pb-2 pt-3 px-4">
+                      <CardTitle className="text-xs">SOLICITAÇÃO / AGENDADA / FILA DE ESPERA</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3">
+                      {metricsAgendadaMutation.isPending ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="text-xs">Carregando...</span>
+                        </div>
+                      ) : metricsAgendadaMutation.data?.ok ? (
+                        <>
+                          <div className="text-2xl font-bold text-green-600">
+                            {metricsAgendadaMutation.data.data?.totalAccumulated.toLocaleString("pt-BR")}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1">Total acumulado</p>
+                          <p className="text-[10px] text-muted-foreground mt-2">
+                            Período: {metricsAgendadaMutation.data.data?.dateStart} a {metricsAgendadaMutation.data.data?.dateEnd}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-red-500">Erro ao carregar</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            )}
 
             {/* Métricas Gerenciais - Apenas para Solicitações */}
             {indexType === "solicitacao" && topProcedures.data?.ok && averageWaitTime.data?.ok && (

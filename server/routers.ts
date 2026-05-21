@@ -603,6 +603,114 @@ export const appRouter = router({
           },
         };
       }),
+
+    // Métricas acumuladas dos últimos 3 anos por status específico
+    metricsAccumulated: protectedProcedure
+      .input(z.object({
+        statusFilter: z.array(z.string()).optional(), // Ex: ["SOLICITAÇÃO / PENDENTE / FILA DE ESPERA"]
+        procedimentoSearch: z.string().optional(), // Ex: "CONSULTA EM"
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config = await getSisregConfig(ctx.user.id);
+        if (!config) {
+          return { ok: false, error: "Configuração não encontrada.", data: null };
+        }
+
+        const password = decryptPassword(config.encryptedPassword);
+        const credentials = { baseUrl: config.baseUrl, username: config.username, password };
+
+        // Calcular período dos últimos 3 anos
+        const today = new Date();
+        const threeYearsAgo = new Date(today.getFullYear() - 3, today.getMonth(), today.getDate());
+        const dateStart = threeYearsAgo.toISOString().split("T")[0];
+        const dateEnd = today.toISOString().split("T")[0];
+
+        // Buscar dados com período de 3 anos
+        const allHits: Record<string, unknown>[] = [];
+        let totalRecords = 0;
+        const batchSize = 1000;
+        let currentFrom = 0;
+
+        const firstResult = await executeSisregSearch(credentials, {
+          indexType: "solicitacao",
+          mode: "fila",
+          size: batchSize,
+          from: 0,
+          dateStart,
+          dateEnd,
+        });
+
+        if (!firstResult.ok) {
+          return { ok: false, error: firstResult.errorMessage || "Erro na consulta.", data: null };
+        }
+
+        totalRecords = firstResult.total;
+        allHits.push(...firstResult.hits);
+        currentFrom = batchSize;
+
+        // Fetch até 10000 registros
+        while (currentFrom < Math.min(totalRecords, 10000) && allHits.length < 10000) {
+          const pageResult = await executeSisregSearch(credentials, {
+            indexType: "solicitacao",
+            mode: "fila",
+            size: batchSize,
+            from: currentFrom,
+            dateStart,
+            dateEnd,
+          });
+          if (!pageResult.ok || pageResult.hits.length === 0) break;
+          allHits.push(...pageResult.hits);
+          currentFrom += batchSize;
+        }
+
+        // Filtrar por status se especificado
+        let filteredByStatus = allHits;
+        if (input.statusFilter && input.statusFilter.length > 0) {
+          filteredByStatus = allHits.filter((hit) => {
+            const status = String(hit.status_solicitacao || "");
+            return input.statusFilter!.some(s => status.includes(s));
+          });
+        }
+
+        // Filtrar por procedimento se especificado
+        let filteredByProcedimento = filteredByStatus;
+        if (input.procedimentoSearch) {
+          filteredByProcedimento = filteredByStatus.filter((hit) => {
+            const proc = String(hit.descricao_interna_procedimento || hit.nome_grupo_procedimento || "").toUpperCase();
+            return proc.includes(input.procedimentoSearch!.toUpperCase());
+          });
+        }
+
+        // Contar total acumulado
+        const totalAccumulated = filteredByProcedimento.length;
+
+        // Agrupar por procedimento para retornar lista
+        const byProcedimento: Record<string, number> = {};
+        for (const hit of filteredByProcedimento) {
+          const proc = String(hit.descricao_interna_procedimento || hit.nome_grupo_procedimento || "N/A");
+          if (proc !== "N/A") {
+            byProcedimento[proc] = (byProcedimento[proc] || 0) + 1;
+          }
+        }
+
+        // Ordenar procedimentos por frequência
+        const procedimentosList = Object.entries(byProcedimento)
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, count]) => ({ name, count }));
+
+        return {
+          ok: true,
+          error: null,
+          data: {
+            totalAccumulated,
+            dateStart,
+            dateEnd,
+            procedimentos: procedimentosList,
+            statusFilter: input.statusFilter,
+            procedimentoSearch: input.procedimentoSearch,
+          },
+        };
+      }),
   }),
 
   // LLM Insights
