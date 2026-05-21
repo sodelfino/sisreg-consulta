@@ -106,3 +106,12 @@
 - [x] Calcular período dos últimos 3 anos automaticamente
 - [x] Criar testes unitários para métricas (12 testes passaram)
 - [x] Validar dados com período correto
+
+## Nova Feature: Sistema Dinâmico de Consultas com Profissionais de Saúde
+- [x] Adicionar constantes TERMOS_EXCLUIR_NAO_CONSULTA e PREFIXOS_CONSULTA_VALIDOS em shared/sisreg.ts
+- [x] Criar função isConsultaProfissionalSaude em shared/sisreg.ts
+- [x] Criar função listarConsultasProfissionaisDisponiveis no backend (agregações ES)
+- [x] Criar endpoint tRPC search.listarConsultasProfissionais
+- [x] Implementar componente de seleção com checkboxes no frontend
+- [x] Modificar busca para aceitar múltiplas consultas selecionadas (pipe separator)
+- [x] Criar testes unitários para validar filtros (135 testes passaram)

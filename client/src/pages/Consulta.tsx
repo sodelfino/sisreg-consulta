@@ -89,6 +89,13 @@ export default function Consulta() {
   const [situacaoFilter, setSituacaoFilter] = useState<string[]>([]);
   const [riscoFilter, setRiscoFilter] = useState<string[]>([]);
 
+  // Consultas com profissionais de saúde
+  const [consultasDisponiveis, setConsultasDisponiveis] = useState<string[]>([]);
+  const [consultasSelecionadas, setConsultasSelecionadas] = useState<string[]>([]);
+  const [filtroConsulta, setFiltroConsulta] = useState("");
+  const [showConsultaSelector, setShowConsultaSelector] = useState(false);
+  const [loadingConsultas, setLoadingConsultas] = useState(false);
+
   // Results state
   const [results, setResults] = useState<SearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -133,6 +140,28 @@ export default function Consulta() {
     },
   });
 
+  // Mutation para listar consultas profissionais
+  const listarConsultasMutation = trpc.search.listarConsultasProfissionais.useMutation({
+    onSuccess: (data) => {
+      if (data.ok) {
+        setConsultasDisponiveis(data.consultas);
+        toast.success(`${data.totalAposFiltragem} consultas profissionais encontradas (de ${data.totalEncontrado} procedimentos)`);
+      } else {
+        toast.error((data as any).error || (data as any).errorMessage || "Erro ao carregar consultas");
+      }
+      setLoadingConsultas(false);
+    },
+    onError: (error) => {
+      toast.error(error.message);
+      setLoadingConsultas(false);
+    },
+  });
+
+  const handleCarregarConsultas = () => {
+    setLoadingConsultas(true);
+    listarConsultasMutation.mutate({ indexType });
+  };
+
   // Handle index type change
   const handleIndexTypeChange = (newType: IndexType) => {
     setIndexType(newType);
@@ -140,6 +169,8 @@ export default function Consulta() {
     setInsights("");
     setFrom(0);
     setSelectedFields([]);
+    setConsultasDisponiveis([]);
+    setConsultasSelecionadas([]);
   };
 
   // Handle search
@@ -164,6 +195,11 @@ export default function Consulta() {
     setIsSearching(true);
     setInsights("");
     
+    // Determinar procedimentoSearch: se tem consultas selecionadas, usar elas separadas por "|"
+    const procedimentoSearchFinal = consultasSelecionadas.length > 0
+      ? consultasSelecionadas.join("|")
+      : procedimentoSearch.trim() || undefined;
+
     try {
       await searchMutation.mutateAsync({
         indexType,
@@ -173,7 +209,7 @@ export default function Consulta() {
         dateStart: dateStart || undefined,
         dateEnd: dateEnd || undefined,
         selectedFields: selectedFields.length > 0 ? selectedFields : undefined,
-        procedimentoSearch: procedimentoSearch.trim() || undefined,
+        procedimentoSearch: procedimentoSearchFinal,
         situacaoFilter: situacaoFilter.length > 0 ? situacaoFilter : undefined,
         riscoFilter: riscoFilter.length > 0 ? riscoFilter : undefined,
       });
@@ -185,6 +221,9 @@ export default function Consulta() {
   // Handle pagination
   const handlePageChange = (newFrom: number) => {
     setFrom(newFrom);
+    const procedimentoSearchPag = consultasSelecionadas.length > 0
+      ? consultasSelecionadas.join("|")
+      : procedimentoSearch.trim() || undefined;
     searchMutation.mutate({
       indexType,
       mode,
@@ -193,7 +232,7 @@ export default function Consulta() {
       dateStart: dateStart || undefined,
       dateEnd: dateEnd || undefined,
       selectedFields: selectedFields.length > 0 ? selectedFields : undefined,
-      procedimentoSearch: procedimentoSearch.trim() || undefined,
+      procedimentoSearch: procedimentoSearchPag,
       situacaoFilter: situacaoFilter.length > 0 ? situacaoFilter : undefined,
       riscoFilter: riscoFilter.length > 0 ? riscoFilter : undefined,
     });
@@ -698,6 +737,138 @@ export default function Consulta() {
                   <p className="text-xs text-muted-foreground">
                     Busca parcial por descrição ou nome do procedimento
                   </p>
+                </div>
+
+                {/* Consultas com Profissionais de Saúde */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium">Consultas Profissionais</Label>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={handleCarregarConsultas}
+                        disabled={loadingConsultas}
+                      >
+                        {loadingConsultas ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <>{consultasDisponiveis.length > 0 ? "Atualizar" : "Carregar"}</>
+                        )}
+                      </Button>
+                      {consultasDisponiveis.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => setShowConsultaSelector(!showConsultaSelector)}
+                        >
+                          {showConsultaSelector ? "Ocultar" : "Mostrar"}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {consultasSelecionadas.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant="secondary" className="text-xs">
+                        {consultasSelecionadas.length} selecionada(s)
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1 text-xs text-destructive"
+                        onClick={() => setConsultasSelecionadas([])}
+                      >
+                        Limpar
+                      </Button>
+                    </div>
+                  )}
+
+                  {showConsultaSelector && consultasDisponiveis.length > 0 && (
+                    <div className="border rounded-md p-2 space-y-2">
+                      {/* Busca local */}
+                      <Input
+                        placeholder="Filtrar consultas..."
+                        value={filtroConsulta}
+                        onChange={(e) => setFiltroConsulta(e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                      {/* Botões de seleção */}
+                      <div className="flex gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            const filtradas = consultasDisponiveis.filter(c =>
+                              c.toUpperCase().includes(filtroConsulta.toUpperCase())
+                            );
+                            setConsultasSelecionadas([...new Set([...consultasSelecionadas, ...filtradas])]);
+                          }}
+                        >
+                          Selecionar filtradas
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => setConsultasSelecionadas([])}
+                        >
+                          Desmarcar todas
+                        </Button>
+                      </div>
+                      {/* Lista scrollável */}
+                      <ScrollArea className="h-64">
+                        <div className="space-y-1">
+                          {consultasDisponiveis
+                            .filter(c => c.toUpperCase().includes(filtroConsulta.toUpperCase()))
+                            .map((consulta) => (
+                              <div key={consulta} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`consulta-${consulta}`}
+                                  checked={consultasSelecionadas.includes(consulta)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setConsultasSelecionadas([...consultasSelecionadas, consulta]);
+                                    } else {
+                                      setConsultasSelecionadas(consultasSelecionadas.filter(c => c !== consulta));
+                                    }
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`consulta-${consulta}`}
+                                  className="text-xs cursor-pointer leading-tight"
+                                >
+                                  {consulta}
+                                </label>
+                              </div>
+                            ))}
+                        </div>
+                      </ScrollArea>
+                      <p className="text-xs text-muted-foreground">
+                        {consultasDisponiveis.filter(c => c.toUpperCase().includes(filtroConsulta.toUpperCase())).length} de {consultasDisponiveis.length} consultas
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Badges das consultas selecionadas */}
+                  {consultasSelecionadas.length > 0 && !showConsultaSelector && (
+                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                      {consultasSelecionadas.map((consulta) => (
+                        <Badge
+                          key={consulta}
+                          variant="outline"
+                          className="text-xs cursor-pointer hover:bg-destructive/10"
+                          onClick={() => setConsultasSelecionadas(consultasSelecionadas.filter(c => c !== consulta))}
+                        >
+                          {consulta.replace("CONSULTA EM ", "").replace("CONSULTA DE ", "").replace("CONSULTA COM ", "")}
+                          <X className="h-3 w-3 ml-1" />
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Situação Filter - Solicitações apenas */}

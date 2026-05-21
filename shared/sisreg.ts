@@ -255,3 +255,72 @@ export const SITUACAO_LABELS: Record<string, string> = {
   A: "Aprovada",
   C: "Cancelada",
 };
+
+// ============================================================
+// FILTRO DE CONSULTAS COM PROFISSIONAIS DE SAÚDE
+// Exclui exames laboratoriais, de imagem, diagnósticos e procedimentos
+// ============================================================
+
+// Termos que indicam exames/procedimentos (NÃO são consultas com profissionais)
+export const TERMOS_EXCLUIR_NAO_CONSULTA = [
+  // Exames laboratoriais
+  "LABORATORI", "DOSAGEM", "HEMOGRAMA", "COLETA", "SANGUE", "URINA", "FEZES",
+  "GLICEMIA", "CREATININA", "COLESTEROL", "TRIGLICERI", "HEMATOCRITO",
+  "LEUCOCITO", "PLAQUETA", "COAGULOGRAMA", "CULTURA", "SOROLOGIA",
+  "HORMONIO", "TSH", "T3", "T4", "PSA", "BETA HCG", "HEMOGLOBINA",
+  "PROTEINA", "ALBUMINA", "BILIRRUBINA", "TRANSAMINASE", "TGO", "TGP",
+  "AMILASE", "LIPASE", "FOSFATASE", "GAMA GT", "UREIA", "ACIDO URICO",
+  "ELETROFORESE", "IMUNOGLOBULINA", "COMPLEMENTO", "FATOR REUMATOIDE",
+  "ANTICOAGULANTE", "VITAMINA", "FERRO", "FERRITINA", "TRANSFERRINA",
+  // Exames de imagem
+  "RAIO", "RADIOGRAFIA", "ULTRASSONOGRAFIA", "ULTRASSOM", "USG",
+  "TOMOGRAFIA", "RESSONANCIA", "RESSONÂNCIA", "MAMOGRAFIA", "DENSITOMETRIA",
+  "CINTILOGRAFIA", "ARTERIOGRAFIA", "ANGIOGRAFIA", "FLUOROSCOPIA",
+  // Exames diagnósticos
+  "ELETROCARDIOGRAMA", "ECG", "BIOPSIA", "BIÓPSIA", "ENDOSCOPIA",
+  "COLONOSCOPIA", "HOLTER", "MAPA", "ESPIROMETRIA", "AUDIOMETRIA",
+  "ELETROENCEFALOGRAMA", "EEG", "ELETROMIOGRAFIA", "POTENCIAL EVOCADO",
+  "ECOCARDIOGRAMA", "DOPPLER", "CATETERISMO", "BRONCOSCOPIA",
+  "LARINGOSCOPIA", "RETOSSIGMOIDOSCOPIA", "CISTOSCOPIA", "HISTEROSCOPIA",
+  "COLPOSCOPIA", "FUNDOSCOPIA", "CAMPIMETRIA", "TONOMETRIA",
+  "TESTE ERGOMETRICO", "TESTE ERGOMÉTRICO", "UROFLUXOMETRIA",
+  // Procedimentos cirúrgicos e invasivos
+  "CIRURGIA", "CIRURGICO", "CIRÚRGICO", "PUNÇÃO", "PUNCAO", "DRENAGEM",
+  "VACINA", "VACINAÇÃO", "APLICAÇÃO", "APLICACAO", "SESSÃO", "SESSAO",
+  "INFILTRAÇÃO", "INFILTRACAO", "CAUTERIZAÇÃO", "CAUTERIZACAO",
+  "SUTURA", "CURATIVO", "DEBRIDAMENTO", "EXCISÃO", "EXERESE",
+  "LIGADURA", "DILATAÇÃO", "DILATACAO", "IMPLANTE", "PROTESE", "PRÓTESE",
+  // Terapias e reabilitação
+  "FISIOTERAPIA", "FONOTERAPIA", "FONOAUDIOLOGIA", "TERAPIA OCUPACIONAL",
+  "ACUPUNTURA", "QUIMIOTERAPIA", "RADIOTERAPIA", "HEMODIALISE", "HEMODIÁLISE",
+  // Outros procedimentos
+  "PARTO", "CESARIANA", "CURETAGEM", "LITOTRIPSIA", "DIALISE", "DIÁLISE",
+  "TRANSPLANTE", "TRANSFUSÃO", "TRANSFUSAO", "OXIGENOTERAPIA",
+  "MONITORAMENTO", "MONITORIZAÇÃO", "MONITORIZACAO",
+];
+
+// Prefixos válidos que indicam consultas com profissionais de saúde
+export const PREFIXOS_CONSULTA_VALIDOS = [
+  "CONSULTA EM ",
+  "CONSULTA DE ",
+  "CONSULTA COM ",
+  "CONSULTA MÉDICA",
+  "CONSULTA MEDICA",
+];
+
+/**
+ * Verifica se uma descrição de procedimento é uma consulta com profissional de saúde.
+ * Retorna true se começa com prefixo válido E não contém termos de exclusão.
+ */
+export function isConsultaProfissionalSaude(descricao: string): boolean {
+  if (!descricao) return false;
+  const upper = descricao.toUpperCase().trim();
+  
+  // Verificar se começa com prefixo válido
+  const temPrefixoValido = PREFIXOS_CONSULTA_VALIDOS.some(prefixo => upper.startsWith(prefixo));
+  if (!temPrefixoValido) return false;
+  
+  // Verificar se NÃO contém termos de exclusão
+  const contemExclusao = TERMOS_EXCLUIR_NAO_CONSULTA.some(termo => upper.includes(termo));
+  return !contemExclusao;
+}

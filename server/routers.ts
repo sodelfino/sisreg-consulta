@@ -15,7 +15,7 @@ import {
   updateFieldSelection,
   deleteFieldSelection,
 } from "./db";
-import { executeSisregSearch, testSisregConnection } from "./sisreg";
+import { executeSisregSearch, testSisregConnection, listarConsultasProfissionaisDisponiveis } from "./sisreg";
 import { exploreIndex, exploreFieldValues, exploreMapping } from "./explore-index";
 import { IndexType, QueryMode } from "../shared/sisreg";
 import { invokeLLM } from "./_core/llm";
@@ -1001,6 +1001,32 @@ Seja conciso mas informativo. Use formatação markdown para melhor legibilidade
         } catch (error) {
           console.error("[Metrics] Error listing procedures:", error);
           return { ok: false, data: [], error: "Erro ao listar procedimentos" };
+        }
+      }),
+
+    // Listar consultas com profissionais de saúde (filtrado dinamicamente)
+    listarConsultasProfissionais: protectedProcedure
+      .input(z.object({
+        indexType: indexTypeSchema.default("solicitacao"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const config = await getSisregConfig(ctx.user.id);
+          if (!config) {
+            return { ok: false, consultas: [], totalEncontrado: 0, totalAposFiltragem: 0, error: "Credenciais SISREG não configuradas" };
+          }
+
+          const credentials = {
+            baseUrl: config.baseUrl,
+            username: config.username,
+            password: decryptPassword(config.encryptedPassword),
+          };
+
+          const result = await listarConsultasProfissionaisDisponiveis(credentials, input.indexType);
+          return result;
+        } catch (error) {
+          console.error("[Search] Error listing consultas profissionais:", error);
+          return { ok: false, consultas: [], totalEncontrado: 0, totalAposFiltragem: 0, errorMessage: "Erro ao listar consultas" };
         }
       }),
 

@@ -21,6 +21,7 @@ import {
   IndexType,
   MarcacaoMode,
   SolicitacaoMode,
+  isConsultaProfissionalSaude,
 } from "../shared/sisreg";
 
 interface SisregCredentials {
@@ -120,33 +121,47 @@ function buildQueryMarcacaoAmbulatorial(
     mustClauses.push({ terms: { "status_solicitacao.keyword": situacaoFilter } });
   }
 
-  // Procedimento search (marcação tem descricao_interna, descricao_sigtap, nome_grupo)
+  // Procedimento search (marcação usa campos diretos, não nested)
+  // Suporta múltiplas consultas separadas por "|" (pipe)
   if (procedimentoSearch && procedimentoSearch.trim()) {
-    const searchTerm = procedimentoSearch.trim().toUpperCase();
+    const rawSearch = procedimentoSearch.trim().toUpperCase();
+    const searchTerms = rawSearch.includes("|") 
+      ? rawSearch.split("|").map(t => t.trim()).filter(t => t.length > 0)
+      : [rawSearch];
     
-    // Usar nested query para buscar em procedimentos.descricao_interna
-    // Este é o campo REAL onde está a descrição do procedimento
-    // Usar match_phrase para buscar frases compostas (ex: "CONSULTA EM CARDIOLOGIA")
-    // Retorna variações (ex: "CONSULTA EM CARDIOLOGIA - ADULTO") mas não outras especialidades
-    mustClauses.push({
-      nested: {
-        path: "procedimentos",
-        query: {
-          bool: {
-            should: [
-              // match_phrase: busca a frase exata e suas variações (100% acurácia)
-              { match_phrase: { "procedimentos.descricao_interna": searchTerm } },
-              // match com operator AND: busca todas as palavras em sequência
-              { match: { "procedimentos.descricao_interna": { query: searchTerm, operator: "and" } } },
-              // Fallback: busca em descricao_sigtap
-              { match_phrase: { "procedimentos.descricao_sigtap": searchTerm } },
-              { match: { "procedimentos.descricao_sigtap": { query: searchTerm, operator: "and" } } },
-            ],
-            minimum_should_match: 1,
-          },
+    if (searchTerms.length === 1) {
+      const searchTerm = searchTerms[0];
+      mustClauses.push({
+        bool: {
+          should: [
+            { match_phrase: { "descricao_interna_procedimento": searchTerm } },
+            { match: { "descricao_interna_procedimento": { query: searchTerm, operator: "and" } } },
+            { match_phrase: { "descricao_sigtap_procedimento": searchTerm } },
+            { match: { "descricao_sigtap_procedimento": { query: searchTerm, operator: "and" } } },
+          ],
+          minimum_should_match: 1,
         },
-      },
-    });
+      });
+    } else {
+      // Busca múltipla: vários termos separados por "|" (OR)
+      const shouldClauses = searchTerms.map(term => ({
+        bool: {
+          should: [
+            { match_phrase: { "descricao_interna_procedimento": term } },
+            { match: { "descricao_interna_procedimento": { query: term, operator: "and" } } },
+            { match_phrase: { "descricao_sigtap_procedimento": term } },
+            { match: { "descricao_sigtap_procedimento": { query: term, operator: "and" } } },
+          ],
+          minimum_should_match: 1,
+        },
+      }));
+      mustClauses.push({
+        bool: {
+          should: shouldClauses,
+          minimum_should_match: 1,
+        },
+      });
+    }
   }
 
   if (mustClauses.length > 0) {
@@ -225,32 +240,58 @@ function buildQuerySolicitacaoAmbulatorial(
   }
 
   // Procedimento search com múltiplos campos (busca por frase)
+  // Suporta múltiplas consultas separadas por "|" (pipe)
   if (procedimentoSearch && procedimentoSearch.trim()) {
-    const searchTerm = procedimentoSearch.trim().toUpperCase();
+    const rawSearch = procedimentoSearch.trim().toUpperCase();
+    const searchTerms = rawSearch.includes("|") 
+      ? rawSearch.split("|").map(t => t.trim()).filter(t => t.length > 0)
+      : [rawSearch];
     
-    // Usar nested query para buscar em procedimentos.descricao_interna
-    // Este é o campo REAL onde está a descrição do procedimento
-    // Usar match_phrase para buscar frases compostas (ex: "CONSULTA EM CARDIOLOGIA")
-    // Retorna variações (ex: "CONSULTA EM CARDIOLOGIA - ADULTO") mas não outras especialidades
-    mustClauses.push({
-      nested: {
-        path: "procedimentos",
-        query: {
-          bool: {
-            should: [
-              // match_phrase: busca a frase exata e suas variações (100% acurácia)
-              { match_phrase: { "procedimentos.descricao_interna": searchTerm } },
-              // match com operator AND: busca todas as palavras em sequência
-              { match: { "procedimentos.descricao_interna": { query: searchTerm, operator: "and" } } },
-              // Fallback: busca em descricao_sigtap
-              { match_phrase: { "procedimentos.descricao_sigtap": searchTerm } },
-              { match: { "procedimentos.descricao_sigtap": { query: searchTerm, operator: "and" } } },
-            ],
-            minimum_should_match: 1,
+    if (searchTerms.length === 1) {
+      // Busca simples: um único termo
+      const searchTerm = searchTerms[0];
+      mustClauses.push({
+        nested: {
+          path: "procedimentos",
+          query: {
+            bool: {
+              should: [
+                { match_phrase: { "procedimentos.descricao_interna": searchTerm } },
+                { match: { "procedimentos.descricao_interna": { query: searchTerm, operator: "and" } } },
+                { match_phrase: { "procedimentos.descricao_sigtap": searchTerm } },
+                { match: { "procedimentos.descricao_sigtap": { query: searchTerm, operator: "and" } } },
+              ],
+              minimum_should_match: 1,
+            },
           },
         },
-      },
-    });
+      });
+    } else {
+      // Busca múltipla: vários termos separados por "|" (OR)
+      // Cada termo é uma consulta profissional selecionada
+      const shouldClauses = searchTerms.map(term => ({
+        nested: {
+          path: "procedimentos",
+          query: {
+            bool: {
+              should: [
+                { match_phrase: { "procedimentos.descricao_interna": term } },
+                { match: { "procedimentos.descricao_interna": { query: term, operator: "and" } } },
+                { match_phrase: { "procedimentos.descricao_sigtap": term } },
+                { match: { "procedimentos.descricao_sigtap": { query: term, operator: "and" } } },
+              ],
+              minimum_should_match: 1,
+            },
+          },
+        },
+      }));
+      mustClauses.push({
+        bool: {
+          should: shouldClauses,
+          minimum_should_match: 1,
+        },
+      });
+    }
   }
 
   if (mustClauses.length > 0) {
@@ -354,6 +395,162 @@ export async function executeSisregSearch(
       errorMessage: isTimeout 
         ? "Timeout: a consulta demorou mais de 30 segundos. Tente reduzir o período ou os filtros."
         : (error instanceof Error ? error.message : "Erro desconhecido ao consultar API"),
+    };
+  }
+}
+
+// ============================================================
+// LISTAR CONSULTAS COM PROFISSIONAIS DE SAÚDE
+// Usa agregações do Elasticsearch para obter valores únicos
+// ============================================================
+
+export interface ListarConsultasResult {
+  ok: boolean;
+  consultas: string[];
+  totalEncontrado: number;
+  totalAposFiltragem: number;
+  errorMessage?: string;
+}
+
+export async function listarConsultasProfissionaisDisponiveis(
+  credentials: SisregCredentials,
+  indexType: IndexType
+): Promise<ListarConsultasResult> {
+  const { baseUrl, username, password } = credentials;
+  const indexPath = getIndexPath(indexType);
+  const url = `${baseUrl}${indexPath}`;
+  const authHeader = "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
+
+  try {
+    let esQuery: Record<string, unknown>;
+
+    if (indexType === "solicitacao") {
+      // Para solicitação: usar nested aggregation
+      esQuery = {
+        size: 0,
+        aggs: {
+          procedimentos_nested: {
+            nested: {
+              path: "procedimentos",
+            },
+            aggs: {
+              descricao_interna: {
+                terms: {
+                  field: "procedimentos.descricao_interna.keyword",
+                  size: 5000,
+                },
+              },
+              descricao_sigtap: {
+                terms: {
+                  field: "procedimentos.descricao_sigtap.keyword",
+                  size: 5000,
+                },
+              },
+            },
+          },
+        },
+      };
+    } else {
+      // Para marcação: usar agregação direta
+      esQuery = {
+        size: 0,
+        aggs: {
+          descricao_interna: {
+            terms: {
+              field: "descricao_interna_procedimento.keyword",
+              size: 5000,
+            },
+          },
+          descricao_sigtap: {
+            terms: {
+              field: "descricao_sigtap_procedimento.keyword",
+              size: 5000,
+            },
+          },
+        },
+      };
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": authHeader,
+      },
+      body: JSON.stringify(esQuery),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        consultas: [],
+        totalEncontrado: 0,
+        totalAposFiltragem: 0,
+        errorMessage: `HTTP ${response.status}: ${response.statusText}`,
+      };
+    }
+
+    const data = await response.json() as Record<string, unknown>;
+    
+    // Extrair valores únicos das agregações
+    const procedimentosSet = new Set<string>();
+
+    if (indexType === "solicitacao") {
+      const nestedAgg = (data as any).aggregations?.procedimentos_nested;
+      if (nestedAgg) {
+        const descInterna = nestedAgg.descricao_interna?.buckets || [];
+        const descSigtap = nestedAgg.descricao_sigtap?.buckets || [];
+        for (const bucket of descInterna) {
+          if (bucket.key) procedimentosSet.add(String(bucket.key).toUpperCase().trim());
+        }
+        for (const bucket of descSigtap) {
+          if (bucket.key) procedimentosSet.add(String(bucket.key).toUpperCase().trim());
+        }
+      }
+    } else {
+      const aggs = (data as any).aggregations;
+      if (aggs) {
+        const descInterna = aggs.descricao_interna?.buckets || [];
+        const descSigtap = aggs.descricao_sigtap?.buckets || [];
+        for (const bucket of descInterna) {
+          if (bucket.key) procedimentosSet.add(String(bucket.key).toUpperCase().trim());
+        }
+        for (const bucket of descSigtap) {
+          if (bucket.key) procedimentosSet.add(String(bucket.key).toUpperCase().trim());
+        }
+      }
+    }
+
+    const totalEncontrado = procedimentosSet.size;
+
+    // Filtrar apenas consultas com profissionais de saúde
+    const consultas = Array.from(procedimentosSet)
+      .filter(desc => isConsultaProfissionalSaude(desc))
+      .sort();
+
+    return {
+      ok: true,
+      consultas,
+      totalEncontrado,
+      totalAposFiltragem: consultas.length,
+    };
+  } catch (error) {
+    console.error("[SISREG] Erro ao listar consultas profissionais:", error);
+    const isTimeout = error instanceof Error && error.name === "AbortError";
+    return {
+      ok: false,
+      consultas: [],
+      totalEncontrado: 0,
+      totalAposFiltragem: 0,
+      errorMessage: isTimeout
+        ? "Timeout ao buscar lista de consultas."
+        : (error instanceof Error ? error.message : "Erro desconhecido"),
     };
   }
 }
