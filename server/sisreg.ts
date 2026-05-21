@@ -407,6 +407,7 @@ export async function executeSisregSearch(
 export interface ListarConsultasResult {
   ok: boolean;
   consultas: string[];
+  contagens?: Record<string, number>;
   totalEncontrado: number;
   totalAposFiltragem: number;
   errorMessage?: string;
@@ -498,8 +499,9 @@ export async function listarConsultasProfissionaisDisponiveis(
 
     const data = await response.json() as Record<string, unknown>;
     
-    // Extrair valores únicos das agregações
+    // Extrair valores únicos das agregações com contagem
     const procedimentosSet = new Set<string>();
+    const procedimentosMap = new Map<string, number>();
 
     if (indexType === "solicitacao") {
       const nestedAgg = (data as any).aggregations?.procedimentos_nested;
@@ -507,10 +509,20 @@ export async function listarConsultasProfissionaisDisponiveis(
         const descInterna = nestedAgg.descricao_interna?.buckets || [];
         const descSigtap = nestedAgg.descricao_sigtap?.buckets || [];
         for (const bucket of descInterna) {
-          if (bucket.key) procedimentosSet.add(String(bucket.key).toUpperCase().trim());
+          if (bucket.key) {
+            const key = String(bucket.key).toUpperCase().trim();
+            procedimentosSet.add(key);
+            procedimentosMap.set(key, (procedimentosMap.get(key) || 0) + (bucket.doc_count || 0));
+          }
         }
         for (const bucket of descSigtap) {
-          if (bucket.key) procedimentosSet.add(String(bucket.key).toUpperCase().trim());
+          if (bucket.key) {
+            const key = String(bucket.key).toUpperCase().trim();
+            if (!procedimentosSet.has(key)) {
+              procedimentosSet.add(key);
+              procedimentosMap.set(key, (procedimentosMap.get(key) || 0) + (bucket.doc_count || 0));
+            }
+          }
         }
       }
     } else {
@@ -519,24 +531,38 @@ export async function listarConsultasProfissionaisDisponiveis(
         const descInterna = aggs.descricao_interna?.buckets || [];
         const descSigtap = aggs.descricao_sigtap?.buckets || [];
         for (const bucket of descInterna) {
-          if (bucket.key) procedimentosSet.add(String(bucket.key).toUpperCase().trim());
+          if (bucket.key) {
+            const key = String(bucket.key).toUpperCase().trim();
+            procedimentosSet.add(key);
+            procedimentosMap.set(key, (procedimentosMap.get(key) || 0) + (bucket.doc_count || 0));
+          }
         }
         for (const bucket of descSigtap) {
-          if (bucket.key) procedimentosSet.add(String(bucket.key).toUpperCase().trim());
+          if (bucket.key) {
+            const key = String(bucket.key).toUpperCase().trim();
+            if (!procedimentosSet.has(key)) {
+              procedimentosSet.add(key);
+              procedimentosMap.set(key, (procedimentosMap.get(key) || 0) + (bucket.doc_count || 0));
+            }
+          }
         }
       }
     }
 
     const totalEncontrado = procedimentosSet.size;
 
-    // Filtrar apenas consultas com profissionais de saúde
-    const consultas = Array.from(procedimentosSet)
-      .filter(desc => isConsultaProfissionalSaude(desc))
-      .sort();
+    // Filtrar apenas consultas com profissionais de saúde e manter contagem
+    const consultasComContagem = Array.from(procedimentosMap.entries())
+      .filter(([desc]) => isConsultaProfissionalSaude(desc))
+      .sort((a, b) => b[1] - a[1]); // Ordenar por contagem decrescente
+
+    const consultas = consultasComContagem.map(([desc]) => desc);
+    const contagens: Record<string, number> = Object.fromEntries(consultasComContagem);
 
     return {
       ok: true,
       consultas,
+      contagens,
       totalEncontrado,
       totalAposFiltragem: consultas.length,
     };

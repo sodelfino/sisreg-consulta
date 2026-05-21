@@ -131,3 +131,12 @@
 - [x] Atualizar frontend para usar valores completos nos checkboxes
 - [x] Manter SITUACAO_LABELS para formatação na tabela (compatibilidade)
 - [x] Testes passaram (140/142 - 2 falhas pré-existentes não relacionadas)
+
+## Nova Feature: Carregamento Automático de Consultas Profissionais
+- [x] Adicionar checkbox "Apenas consultas com profissionais" (ativo por padrão)
+- [x] Carregar lista automaticamente ao montar componente ou ativar checkbox
+- [x] Mostrar lista com checkboxes, contagem e filtro local
+- [x] Implementar "Selecionar todas" e tags de selecionadas
+- [x] Persistir preferência no localStorage
+- [x] Quando desativado, voltar ao modo texto livre
+- [x] Testes passaram (140/142 - 2 falhas pré-existentes)

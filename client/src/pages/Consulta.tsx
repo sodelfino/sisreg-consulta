@@ -91,10 +91,15 @@ export default function Consulta() {
   const [riscoFilter, setRiscoFilter] = useState<string[]>([]);
 
   // Consultas com profissionais de saúde
+  const [apenasConsultasProfissionais, setApenasConsultasProfissionais] = useState(() => {
+    const saved = localStorage.getItem('sisreg_apenas_consultas_prof');
+    return saved !== null ? saved === 'true' : true; // Ativo por padrão
+  });
   const [consultasDisponiveis, setConsultasDisponiveis] = useState<string[]>([]);
+  const [consultasContagens, setConsultasContagens] = useState<Record<string, number>>({});
   const [consultasSelecionadas, setConsultasSelecionadas] = useState<string[]>([]);
   const [filtroConsulta, setFiltroConsulta] = useState("");
-  const [showConsultaSelector, setShowConsultaSelector] = useState(false);
+  const [showConsultaSelector, setShowConsultaSelector] = useState(true);
   const [loadingConsultas, setLoadingConsultas] = useState(false);
 
   // Results state
@@ -146,6 +151,8 @@ export default function Consulta() {
     onSuccess: (data) => {
       if (data.ok) {
         setConsultasDisponiveis(data.consultas);
+        setConsultasContagens((data as any).contagens || {});
+        setShowConsultaSelector(true);
         toast.success(`${data.totalAposFiltragem} consultas profissionais encontradas (de ${data.totalEncontrado} procedimentos)`);
       } else {
         toast.error((data as any).error || (data as any).errorMessage || "Erro ao carregar consultas");
@@ -162,6 +169,22 @@ export default function Consulta() {
     setLoadingConsultas(true);
     listarConsultasMutation.mutate({ indexType });
   };
+
+  // Carregar consultas automaticamente quando checkbox está ativo e config disponível
+  const configAvailable = !!configQuery.data;
+  useEffect(() => {
+    if (apenasConsultasProfissionais && configAvailable && consultasDisponiveis.length === 0) {
+      handleCarregarConsultas();
+    }
+  }, [apenasConsultasProfissionais, configAvailable]);
+
+  // Persistir preferência no localStorage
+  useEffect(() => {
+    localStorage.setItem('sisreg_apenas_consultas_prof', String(apenasConsultasProfissionais));
+    if (!apenasConsultasProfissionais) {
+      setConsultasSelecionadas([]);
+    }
+  }, [apenasConsultasProfissionais]);
 
   // Handle index type change
   const handleIndexTypeChange = (newType: IndexType) => {
@@ -722,152 +745,200 @@ export default function Consulta() {
                   </div>
                 )}
 
-                {/* Procedimento Search */}
-                <div className="space-y-1">
-                  <Label htmlFor="procedimentoSearch" className="text-xs">Buscar Procedimento</Label>
-                  <div className="relative">
-                    <Stethoscope className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="procedimentoSearch"
-                      placeholder="Digite parte do nome..."
-                      value={procedimentoSearch}
-                      onChange={(e) => setProcedimentoSearch(e.target.value)}
-                      className="h-9 pl-9"
+                {/* Filtro de Procedimentos */}
+                <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+                  {/* Checkbox principal */}
+                  <div className="flex items-start space-x-3">
+                    <Checkbox
+                      id="apenasConsultasProfissionais"
+                      checked={apenasConsultasProfissionais}
+                      onCheckedChange={(checked) => setApenasConsultasProfissionais(!!checked)}
+                      className="mt-0.5"
                     />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Busca parcial por descrição ou nome do procedimento
-                  </p>
-                </div>
-
-                {/* Consultas com Profissionais de Saúde */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-medium">Consultas Profissionais</Label>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={handleCarregarConsultas}
-                        disabled={loadingConsultas}
+                    <div className="flex-1">
+                      <label
+                        htmlFor="apenasConsultasProfissionais"
+                        className="text-sm font-medium cursor-pointer flex items-center gap-2"
                       >
-                        {loadingConsultas ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <>{consultasDisponiveis.length > 0 ? "Atualizar" : "Carregar"}</>
-                        )}
-                      </Button>
-                      {consultasDisponiveis.length > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => setShowConsultaSelector(!showConsultaSelector)}
-                        >
-                          {showConsultaSelector ? "Ocultar" : "Mostrar"}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {consultasSelecionadas.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      <Badge variant="secondary" className="text-xs">
-                        {consultasSelecionadas.length} selecionada(s)
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 px-1 text-xs text-destructive"
-                        onClick={() => setConsultasSelecionadas([])}
-                      >
-                        Limpar
-                      </Button>
-                    </div>
-                  )}
-
-                  {showConsultaSelector && consultasDisponiveis.length > 0 && (
-                    <div className="border rounded-md p-2 space-y-2">
-                      {/* Busca local */}
-                      <Input
-                        placeholder="Filtrar consultas..."
-                        value={filtroConsulta}
-                        onChange={(e) => setFiltroConsulta(e.target.value)}
-                        className="h-7 text-xs"
-                      />
-                      {/* Botões de seleção */}
-                      <div className="flex gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => {
-                            const filtradas = consultasDisponiveis.filter(c =>
-                              c.toUpperCase().includes(filtroConsulta.toUpperCase())
-                            );
-                            setConsultasSelecionadas([...new Set([...consultasSelecionadas, ...filtradas])]);
-                          }}
-                        >
-                          Selecionar filtradas
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => setConsultasSelecionadas([])}
-                        >
-                          Desmarcar todas
-                        </Button>
-                      </div>
-                      {/* Lista scrollável */}
-                      <ScrollArea className="h-64">
-                        <div className="space-y-1">
-                          {consultasDisponiveis
-                            .filter(c => c.toUpperCase().includes(filtroConsulta.toUpperCase()))
-                            .map((consulta) => (
-                              <div key={consulta} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`consulta-${consulta}`}
-                                  checked={consultasSelecionadas.includes(consulta)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setConsultasSelecionadas([...consultasSelecionadas, consulta]);
-                                    } else {
-                                      setConsultasSelecionadas(consultasSelecionadas.filter(c => c !== consulta));
-                                    }
-                                  }}
-                                />
-                                <label
-                                  htmlFor={`consulta-${consulta}`}
-                                  className="text-xs cursor-pointer leading-tight"
-                                >
-                                  {consulta}
-                                </label>
-                              </div>
-                            ))}
-                        </div>
-                      </ScrollArea>
-                      <p className="text-xs text-muted-foreground">
-                        {consultasDisponiveis.filter(c => c.toUpperCase().includes(filtroConsulta.toUpperCase())).length} de {consultasDisponiveis.length} consultas
+                        <Stethoscope className="h-4 w-4 text-blue-600" />
+                        Mostrar apenas consultas com profissionais de saude
+                      </label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Exclui automaticamente exames laboratoriais, de imagem e procedimentos diagnosticos
                       </p>
                     </div>
+                  </div>
+
+                  {/* Modo ativo: lista de consultas */}
+                  {apenasConsultasProfissionais && (
+                    <div className="space-y-2 pl-7">
+                      {/* Loading state */}
+                      {loadingConsultas && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Carregando consultas disponiveis...
+                        </div>
+                      )}
+
+                      {/* Lista carregada */}
+                      {!loadingConsultas && consultasDisponiveis.length > 0 && (
+                        <>
+                          {/* Header com contagem e botoes */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-blue-700">
+                              {consultasSelecionadas.length} de {consultasDisponiveis.length} selecionadas
+                            </span>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={handleCarregarConsultas}
+                              >
+                                Atualizar
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => setShowConsultaSelector(!showConsultaSelector)}
+                              >
+                                {showConsultaSelector ? "Ocultar" : "Expandir"}
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Seletor expandido */}
+                          {showConsultaSelector && (
+                            <div className="border rounded-md p-2 space-y-2 bg-white">
+                              {/* Busca local */}
+                              <div className="relative">
+                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                                <Input
+                                  placeholder="Filtrar consultas..."
+                                  value={filtroConsulta}
+                                  onChange={(e) => setFiltroConsulta(e.target.value)}
+                                  className="h-7 text-xs pl-7"
+                                />
+                              </div>
+                              {/* Botoes de selecao */}
+                              <div className="flex gap-1 flex-wrap">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={() => {
+                                    const filtradas = consultasDisponiveis.filter(c =>
+                                      c.toUpperCase().includes(filtroConsulta.toUpperCase())
+                                    );
+                                    setConsultasSelecionadas([...new Set([...consultasSelecionadas, ...filtradas])]);
+                                  }}
+                                >
+                                  Selecionar todas
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={() => setConsultasSelecionadas([])}
+                                >
+                                  Desmarcar todas
+                                </Button>
+                              </div>
+                              {/* Lista scrollavel com contagem */}
+                              <ScrollArea className="h-64">
+                                <div className="space-y-1">
+                                  {consultasDisponiveis
+                                    .filter(c => c.toUpperCase().includes(filtroConsulta.toUpperCase()))
+                                    .map((consulta) => (
+                                      <div key={consulta} className="flex items-center justify-between group hover:bg-accent/50 rounded px-1 py-0.5">
+                                        <div className="flex items-center space-x-2">
+                                          <Checkbox
+                                            id={`consulta-${consulta}`}
+                                            checked={consultasSelecionadas.includes(consulta)}
+                                            onCheckedChange={(checked) => {
+                                              if (checked) {
+                                                setConsultasSelecionadas([...consultasSelecionadas, consulta]);
+                                              } else {
+                                                setConsultasSelecionadas(consultasSelecionadas.filter(c => c !== consulta));
+                                              }
+                                            }}
+                                          />
+                                          <label
+                                            htmlFor={`consulta-${consulta}`}
+                                            className="text-xs cursor-pointer leading-tight"
+                                          >
+                                            {consulta}
+                                          </label>
+                                        </div>
+                                        {consultasContagens[consulta] && (
+                                          <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-mono">
+                                            {consultasContagens[consulta].toLocaleString('pt-BR')}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    ))}
+                                </div>
+                              </ScrollArea>
+                              <p className="text-xs text-muted-foreground">
+                                {consultasDisponiveis.filter(c => c.toUpperCase().includes(filtroConsulta.toUpperCase())).length} de {consultasDisponiveis.length} consultas
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Tags das consultas selecionadas (quando oculto) */}
+                          {!showConsultaSelector && consultasSelecionadas.length > 0 && (
+                            <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                              {consultasSelecionadas.map((consulta) => (
+                                <Badge
+                                  key={consulta}
+                                  variant="outline"
+                                  className="text-xs cursor-pointer hover:bg-destructive/10"
+                                  onClick={() => setConsultasSelecionadas(consultasSelecionadas.filter(c => c !== consulta))}
+                                >
+                                  {consulta.replace("CONSULTA EM ", "").replace("CONSULTA DE ", "").replace("CONSULTA COM ", "")}
+                                  <X className="h-3 w-3 ml-1" />
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {/* Erro ou sem config */}
+                      {!loadingConsultas && consultasDisponiveis.length === 0 && configAvailable && (
+                        <div className="text-xs text-muted-foreground py-2">
+                          Nenhuma consulta carregada.
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="h-auto p-0 text-xs ml-1"
+                            onClick={handleCarregarConsultas}
+                          >
+                            Tentar novamente
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   )}
 
-                  {/* Badges das consultas selecionadas */}
-                  {consultasSelecionadas.length > 0 && !showConsultaSelector && (
-                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
-                      {consultasSelecionadas.map((consulta) => (
-                        <Badge
-                          key={consulta}
-                          variant="outline"
-                          className="text-xs cursor-pointer hover:bg-destructive/10"
-                          onClick={() => setConsultasSelecionadas(consultasSelecionadas.filter(c => c !== consulta))}
-                        >
-                          {consulta.replace("CONSULTA EM ", "").replace("CONSULTA DE ", "").replace("CONSULTA COM ", "")}
-                          <X className="h-3 w-3 ml-1" />
-                        </Badge>
-                      ))}
+                  {/* Modo desativado: campo de texto livre */}
+                  {!apenasConsultasProfissionais && (
+                    <div className="space-y-1 pl-7">
+                      <Label htmlFor="procedimentoSearch" className="text-xs">Buscar Procedimento (texto livre)</Label>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="procedimentoSearch"
+                          placeholder="Digite parte do nome do procedimento..."
+                          value={procedimentoSearch}
+                          onChange={(e) => setProcedimentoSearch(e.target.value)}
+                          className="h-9 pl-9"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Busca parcial por descricao ou nome do procedimento (inclui exames e diagnosticos)
+                      </p>
                     </div>
                   )}
                 </div>
