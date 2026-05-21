@@ -103,10 +103,20 @@ export async function getUserByOpenId(openId: string) {
 
 // ============ Encryption Helpers ============
 
-const ENCRYPTION_KEY = process.env.JWT_SECRET || 'default-key-for-dev';
+const _rawEncryptionKey = process.env.ENCRYPTION_KEY;
+
+if (!_rawEncryptionKey || _rawEncryptionKey.length < 32) {
+  throw new Error(
+    "❌ ENCRYPTION_KEY ausente ou muito curta (mínimo 32 caracteres). " +
+    "Configure a variável de ambiente antes de iniciar o servidor. " +
+    'Gere uma chave com: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+  );
+}
+
+const ENCRYPTION_KEY: string = _rawEncryptionKey;
 
 function getEncryptionKey(): Buffer {
-  // Use first 32 bytes of JWT_SECRET as encryption key
+  // Derive a 32-byte key from ENCRYPTION_KEY using SHA-256
   return crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
 }
 

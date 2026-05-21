@@ -115,3 +115,12 @@
 - [x] Implementar componente de seleção com checkboxes no frontend
 - [x] Modificar busca para aceitar múltiplas consultas selecionadas (pipe separator)
 - [x] Criar testes unitários para validar filtros (135 testes passaram)
+
+## PATCH 01: Chave de Criptografia Insegura (CRÍTICA)
+- [x] Remover fallback inseguro "default-key-for-dev"
+- [x] Adicionar validação obrigatória de ENCRYPTION_KEY (mínimo 32 caracteres)
+- [x] Servidor recusa iniciar sem chave válida com mensagem clara
+- [x] Gerar chave segura de 64 caracteres hex
+- [x] Configurar ENCRYPTION_KEY como variável de ambiente
+- [x] Criar testes unitários para validar encrypt/decrypt (5 testes passaram)
+- [x] Validar que servidor inicia corretamente com a chave configurada
