@@ -247,7 +247,8 @@ export const RISK_LABELS: Record<number, string> = {
 };
 
 // Situation labels
-export const SITUACAO_LABELS: Record<string, string> = {
+// Labels antigos (mantidos para compatibilidade com formatação de colunas)
+export const SITUACAO_LABELS_CURTOS: Record<string, string> = {
   P: "Pendente",
   R: "Reenviada",
   D: "Devolvida",
@@ -255,6 +256,27 @@ export const SITUACAO_LABELS: Record<string, string> = {
   A: "Aprovada",
   C: "Cancelada",
 };
+
+// Mapeamento completo: valores exatos do campo sigla_situacao.keyword no Elasticsearch
+// Estes são os valores que devem ser enviados no filtro de situação
+export const SITUACOES_SOLICITACAO = [
+  { value: "SOLICITAÇÃO / PENDENTE / FILA DE ESPERA", label: "Pendente — Fila de Espera" },
+  { value: "SOLICITAÇÃO / PENDENTE / REGULADOR", label: "Pendente — Regulador" },
+  { value: "SOLICITAÇÃO / REENVIADA / REGULADOR", label: "Reenviada — Regulador" },
+  { value: "SOLICITAÇÃO / AGENDADA / FILA DE ESPERA", label: "Agendada" },
+  { value: "SOLICITAÇÃO / AUTORIZADA / REGULADOR", label: "Autorizada" },
+  { value: "AGENDAMENTO / CONFIRMADO / EXECUTANTE", label: "Confirmada" },
+  { value: "SOLICITAÇÃO / DEVOLVIDA / SOLICITANTE", label: "Devolvida" },
+  { value: "SOLICITAÇÃO / NEGADA / REGULADOR", label: "Negada" },
+  { value: "SOLICITAÇÃO / CANCELADA / SOLICITANTE", label: "Cancelada" },
+];
+
+// Mapeamento para exibição na tabela (valor completo -> label curto)
+export const SITUACAO_LABELS: Record<string, string> = Object.fromEntries([
+  ...SITUACOES_SOLICITACAO.map(s => [s.value, s.label]),
+  // Manter labels curtos como fallback
+  ...Object.entries(SITUACAO_LABELS_CURTOS),
+]);
 
 // ============================================================
 // FILTRO DE CONSULTAS COM PROFISSIONAIS DE SAÚDE

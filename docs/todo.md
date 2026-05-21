@@ -124,3 +124,10 @@
 - [x] Configurar ENCRYPTION_KEY como variável de ambiente
 - [x] Criar testes unitários para validar encrypt/decrypt (5 testes passaram)
 - [x] Validar que servidor inicia corretamente com a chave configurada
+
+## Bug Fix: Filtro de Situação Retorna Zero Resultados
+- [x] Diagnosticar mismatch: checkboxes enviavam valores curtos (P, R, D) mas ES espera strings completas
+- [x] Criar SITUACOES_SOLICITACAO com valores exatos do campo sigla_situacao.keyword
+- [x] Atualizar frontend para usar valores completos nos checkboxes
+- [x] Manter SITUACAO_LABELS para formatação na tabela (compatibilidade)
+- [x] Testes passaram (140/142 - 2 falhas pré-existentes não relacionadas)

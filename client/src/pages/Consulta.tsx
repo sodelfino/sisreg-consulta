@@ -44,6 +44,7 @@ import {
   DEFAULT_FIELDS_SOLICITACAO,
   RISK_LABELS,
   SITUACAO_LABELS,
+  SITUACOES_SOLICITACAO,
   INDEX_LABELS,
   type QueryMode,
   type IndexType,
@@ -876,21 +877,21 @@ export default function Consulta() {
                   <div className="space-y-2">
                     <Label className="text-xs">Filtrar por Situação</Label>
                     <div className="space-y-2">
-                      {Object.entries(SITUACAO_LABELS).map(([key, label]) => (
-                        <div key={key} className="flex items-center space-x-2">
+                      {SITUACOES_SOLICITACAO.map((sit) => (
+                        <div key={sit.value} className="flex items-center space-x-2">
                           <Checkbox
-                            id={`situacao-${key}`}
-                            checked={situacaoFilter.includes(key)}
+                            id={`situacao-${sit.value}`}
+                            checked={situacaoFilter.includes(sit.value)}
                             onCheckedChange={(checked) => {
                               if (checked) {
-                                setSituacaoFilter([...situacaoFilter, key]);
+                                setSituacaoFilter([...situacaoFilter, sit.value]);
                               } else {
-                                setSituacaoFilter(situacaoFilter.filter(s => s !== key));
+                                setSituacaoFilter(situacaoFilter.filter(s => s !== sit.value));
                               }
                             }}
                           />
-                          <label htmlFor={`situacao-${key}`} className="text-xs cursor-pointer">
-                            {label}
+                          <label htmlFor={`situacao-${sit.value}`} className="text-xs cursor-pointer">
+                            {sit.label}
                           </label>
                         </div>
                       ))}
