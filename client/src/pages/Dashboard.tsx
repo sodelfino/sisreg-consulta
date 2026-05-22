@@ -1,37 +1,13 @@
-import { useState, useMemo, useEffect } from "react";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { useState, useCallback } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import DashboardLayout from "@/components/DashboardLayout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { toast } from "sonner";
-import {
-  AlertCircle,
-  BarChart3,
-  Calendar,
-  CheckCircle2,
-  Clock,
-  Database,
-  Download,
-  FileSpreadsheet,
-  FileText,
-  Filter,
-  Lightbulb,
-  Loader2,
-  PieChart,
-  RefreshCw,
-  Settings,
-  TrendingUp,
-  Zap,
-} from "lucide-react";
-import { Link, useLocation } from "wouter";
-import { getLoginUrl } from "@/const";
+import { Label } from "@/components/ui/label";
 import {
   BarChart,
   Bar,
@@ -40,278 +16,171 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart as RechartsPieChart,
+  PieChart,
   Pie,
   Cell,
   Legend,
 } from "recharts";
-import { RISK_LABELS, INDEX_LABELS, type QueryMode, type IndexType } from "../../../shared/sisreg";
-import { Streamdown } from "streamdown";
+import {
+  ClipboardList,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  RefreshCw,
+  Calendar,
+  Filter,
+  TrendingUp,
+  Activity,
+  Settings,
+} from "lucide-react";
+import { Link } from "wouter";
+import { SITUACOES_SOLICITACAO, RISK_LABELS } from "../../../shared/sisreg";
 
-// Colors for charts
-const COLORS = [
-  "#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8",
-  "#82CA9D", "#FFC658", "#8DD1E1", "#A4DE6C", "#D0ED57",
-  "#FA8072", "#DDA0DD", "#87CEEB", "#F0E68C", "#E6E6FA",
+// Presets de período
+const PERIOD_PRESETS = [
+  { label: "7 dias", days: 7 },
+  { label: "30 dias", days: 30 },
+  { label: "3 meses", days: 90 },
+  { label: "6 meses", days: 180 },
+  { label: "1 ano", days: 365 },
+  { label: "3 anos", days: 1095 },
 ];
 
-const RISK_COLORS: Record<string, string> = {
-  "0": "#6B7280",
-  "1": "#EF4444",
-  "2": "#F97316",
-  "3": "#EAB308",
-  "4": "#22C55E",
-  "5": "#3B82F6",
+// Situações padrão ativas (pendentes e devolvidas)
+const DEFAULT_SITUACOES = [
+  "SOLICITAÇÃO / PENDENTE / FILA DE ESPERA",
+  "SOLICITAÇÃO / PENDENTE / REGULADOR",
+  "SOLICITAÇÃO / DEVOLVIDA / SOLICITANTE",
+];
+
+// Cores para gráficos de risco
+const RISCO_COLORS: Record<string, string> = {
+  "0": "#ef4444",
+  "1": "#f97316",
+  "2": "#eab308",
+  "3": "#6b7280",
+  "4": "#6b7280",
+};
+
+const RISCO_LABELS_DISPLAY: Record<string, string> = {
+  "0": "Emergência",
+  "1": "Urgência",
+  "2": "Prioritário",
+  "3": "Eletivo",
+  "4": "Eletivo",
+};
+
+const BAR_COLORS = [
+  "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#ec4899",
+  "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6",
+];
+
+function getDateFromDaysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().split("T")[0];
+}
+
+function getTodayStr(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function simplifyEspecialidade(name: string): string {
+  return name
+    .replace(/^CONSULTA EM /i, "")
+    .replace(/^CONSULTA DE /i, "")
+    .replace(/^CONSULTA COM /i, "")
+    .replace(/^CONSULTA MÉDICA /i, "")
+    .replace(/^CONSULTA MEDICA /i, "")
+    .trim();
+}
+
+type DashData = {
+  totalFila: number;
+  totalPendentes: number;
+  totalDevolvidas: number;
+  totalAgendadas: number;
+  totalUnfiltered: number;
+  bySituacao: { name: string; value: number }[];
+  byRisco: { name: string; value: number }[];
+  top10Especialidades: { name: string; value: number }[];
+  maisAntigas: { descricao: string; dataSolicitacao: string; risco: string; unidade: string; diasEspera: number }[];
+  dateStart?: string;
+  dateEnd?: string;
 };
 
 export default function Dashboard() {
-  const { user, loading: authLoading, isAuthenticated } = useAuth();
+  const { loading: authLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
 
-  // Filter state
-  const [indexType, setIndexType] = useState<IndexType>("solicitacao");
-  const [mode, setMode] = useState<QueryMode>("fila");
-  const [dateStart, setDateStart] = useState("");
-  const [dateEnd, setDateEnd] = useState("");
-  const [selectedProcedimentos, setSelectedProcedimentos] = useState<string[]>([]);
-  const [showProcedimentoFilter, setShowProcedimentoFilter] = useState(false);
-  const [procedimentoSearch, setProcedimentoSearch] = useState("");
-  const [showLlmInsights, setShowLlmInsights] = useState(false);
+  // Filtros
+  const [selectedPreset, setSelectedPreset] = useState(2); // 3 meses padrão
+  const [customDateStart, setCustomDateStart] = useState("");
+  const [customDateEnd, setCustomDateEnd] = useState("");
+  const [isCustomPeriod, setIsCustomPeriod] = useState(false);
+  const [situacaoFilter, setSituacaoFilter] = useState<string[]>(DEFAULT_SITUACOES);
+  const [riscoFilter, setRiscoFilter] = useState<string[]>([]);
 
-  // Mudar modo quando indexType mudar
-  useEffect(() => {
-    if (indexType === "solicitacao") {
-      setMode("fila");
-    } else if (mode === "fila") {
-      setMode("quick");
+  // Dados
+  const [dashData, setDashData] = useState<DashData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
+
+  const consultasFilaMutation = trpc.dashboard.consultasFila.useMutation();
+
+  const getDateRange = useCallback(() => {
+    if (isCustomPeriod && customDateStart && customDateEnd) {
+      return { dateStart: customDateStart, dateEnd: customDateEnd };
     }
-  }, [indexType]);
+    const days = PERIOD_PRESETS[selectedPreset]?.days ?? 90;
+    return { dateStart: getDateFromDaysAgo(days), dateEnd: getTodayStr() };
+  }, [isCustomPeriod, customDateStart, customDateEnd, selectedPreset]);
 
-  // Check config
-  const configQuery = trpc.config.get.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
-
-  // Dashboard aggregation mutation
-  const aggregateMutation = trpc.dashboard.aggregate.useMutation({
-    onSuccess: (data) => {
-      if (data.ok) {
-        toast.success(`Dashboard atualizado com ${data.data?.total.toLocaleString("pt-BR")} registros`);
-      } else {
-        toast.error(data.error || "Erro ao carregar dados");
-      }
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  // XLSX export mutation
-  const exportMutation = trpc.search.exportXlsx.useMutation({
-    onSuccess: (data) => {
-      if (data.ok && data.data) {
-        // Download the XLSX file from base64
-        const byteCharacters = atob(data.data.base64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = data.data.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast.success(`Excel exportado: ${data.data.totalExported.toLocaleString("pt-BR")} registros`);
-      } else {
-        toast.error(data.error || "Erro ao exportar");
-      }
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  // Métricas acumuladas para 3 status específicos
-  const metricsFilaEsperaMutation = trpc.dashboard.metricsAccumulated.useMutation();
-  const metricsReguladoMutation = trpc.dashboard.metricsAccumulated.useMutation();
-  const metricsAgendadaMutation = trpc.dashboard.metricsAccumulated.useMutation();
-
-  // Carregar métricas quando o dashboard é aberto
-  useEffect(() => {
-    if (isAuthenticated && configQuery.data) {
-      metricsFilaEsperaMutation.mutate({
-        statusFilter: ["SOLICITAÇÃO / PENDENTE / FILA DE ESPERA"],
-        procedimentoSearch: "CONSULTA EM",
+  const handleLoadDashboard = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMsg(null);
+    const { dateStart, dateEnd } = getDateRange();
+    try {
+      const result = await consultasFilaMutation.mutateAsync({
+        dateStart,
+        dateEnd,
+        situacaoFilter: situacaoFilter.length > 0 ? situacaoFilter : undefined,
+        riscoFilter: riscoFilter.length > 0 ? riscoFilter : undefined,
       });
-      metricsReguladoMutation.mutate({
-        statusFilter: ["SOLICITAÇÃO / PENDENTE / REGULADOR"],
-        procedimentoSearch: "CONSULTA EM",
-      });
-      metricsAgendadaMutation.mutate({
-        statusFilter: ["SOLICITAÇÃO / AGENDADA / FILA DE ESPERA"],
-        procedimentoSearch: "CONSULTA EM",
-      });
-    }
-  }, [isAuthenticated, configQuery.data]);
-
-  // LLM insights mutation
-  const insightsMutation = trpc.insights.generate.useMutation({
-    onSuccess: (data) => {
-      if (data.ok) {
-        setShowLlmInsights(true);
+      if (result.ok && result.data) {
+        setDashData(result.data as DashData);
+        setHasLoaded(true);
       } else {
-        toast.error(data.error || "Erro ao gerar insights");
+        setErrorMsg(result.error || "Erro ao carregar dados.");
       }
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  // Métricas gerenciais
-  const topProcedures = trpc.metrics.topProcedures.useQuery(
-    { dateStart, dateEnd, limit: 10 },
-    { enabled: isAuthenticated && indexType === "solicitacao" }
-  );
-
-  const averageWaitTime = trpc.metrics.averageWaitTime.useQuery(
-    { dateStart, dateEnd },
-    { enabled: isAuthenticated && indexType === "solicitacao" }
-  );
-
-  // Listar procedimentos disponíveis para filtro
-  const procedimentosList = trpc.metrics.listProcedimentos.useQuery(
-    { dateStart, dateEnd },
-    { enabled: isAuthenticated && indexType === "solicitacao" }
-  );
-
-  // Load dashboard data
-  const handleLoadDashboard = () => {
-    if (!configQuery.data) {
-      toast.error("Configure suas credenciais primeiro");
-      setLocation("/configuracao");
-      return;
+    } catch {
+      setErrorMsg("Erro ao conectar ao servidor.");
+    } finally {
+      setIsLoading(false);
     }
+  }, [consultasFilaMutation, getDateRange, situacaoFilter, riscoFilter]);
 
-    if (mode !== "quick" && mode !== "fila" && (!dateStart || !dateEnd)) {
-      toast.error("Selecione o período de datas");
-      return;
-    }
-
-    setShowLlmInsights(false);
-    aggregateMutation.mutate({
-      indexType,
-      mode,
-      dateStart: dateStart || undefined,
-      dateEnd: dateEnd || undefined,
-      procedimentoFilter: selectedProcedimentos.length > 0 ? selectedProcedimentos : undefined,
-    });
-  };
-
-  // Export XLSX via backend
-  const handleExportExcel = () => {
-    if (!configQuery.data) return;
-
-    exportMutation.mutate({
-      indexType,
-      mode,
-      size: 1000,
-      from: 0,
-      dateStart: dateStart || undefined,
-      dateEnd: dateEnd || undefined,
-      procedimentoSearch: selectedProcedimentos.length > 0 ? selectedProcedimentos[0] : undefined,
-      exportAllPages: true,
-    });
-  };
-
-  // Generate LLM insights
-  const handleGenerateLlmInsights = () => {
-    if (!dashboardData) return;
-
-    // Build a summary dataset for LLM
-    const summaryData = [
-      ...dashboardData.byUnidade.map(u => ({
-        tipo: "unidade",
-        nome: u.name,
-        quantidade: u.value,
-      })),
-      ...dashboardData.byProcedimento.map(p => ({
-        tipo: "procedimento",
-        nome: p.name,
-        quantidade: p.value,
-      })),
-      ...dashboardData.byRisco.map(r => ({
-        tipo: "risco",
-        nome: RISK_LABELS[Number(r.name)] || r.name,
-        quantidade: r.value,
-      })),
-      ...dashboardData.byStatus.map(s => ({
-        tipo: "status",
-        nome: s.name,
-        quantidade: s.value,
-      })),
-    ];
-
-    insightsMutation.mutate({
-      data: summaryData,
-      queryMode: mode,
-      indexType,
-      dateStart: dateStart || undefined,
-      dateEnd: dateEnd || undefined,
-    });
-  };
-
-  // Filter procedimentos for selection
-  const filteredProcedimentos = useMemo(() => {
-    const procedimentosData = procedimentosList.data?.ok ? procedimentosList.data.data : [];
-    const allProcedimentos: string[] = procedimentosData.length > 0 
-      ? procedimentosData.map((p: any) => p.label)
-      : (aggregateMutation.data?.data?.allProcedimentos || []);
-    
-    if (!allProcedimentos.length) return [];
-    const search = procedimentoSearch.toLowerCase();
-    return allProcedimentos.filter(
-      (p: string) => p.toLowerCase().includes(search)
-    );
-  }, [procedimentosList.data, aggregateMutation.data?.data?.allProcedimentos, procedimentoSearch]);
-
-  // Toggle procedimento selection
-  const toggleProcedimento = (proc: string) => {
-    setSelectedProcedimentos((prev) =>
-      prev.includes(proc) ? prev.filter((p) => p !== proc) : [...prev, proc]
+  const toggleSituacao = (value: string) => {
+    setSituacaoFilter(prev =>
+      prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value]
     );
   };
 
-  // Apply procedimento filter
-  const handleApplyProcedimentoFilter = () => {
-    if (!configQuery.data) return;
-    aggregateMutation.mutate({
-      indexType,
-      mode,
-      dateStart: dateStart || undefined,
-      dateEnd: dateEnd || undefined,
-      procedimentoFilter: selectedProcedimentos.length > 0 ? selectedProcedimentos : undefined,
-    });
+  const toggleRisco = (value: string) => {
+    setRiscoFilter(prev =>
+      prev.includes(value) ? prev.filter(r => r !== value) : [...prev, value]
+    );
   };
 
-  // Format risk label
-  const formatRiskLabel = (name: string) => {
-    return RISK_LABELS[Number(name)] || `Risco ${name}`;
+  const handleClickEspecialidade = (especialidade: string) => {
+    setLocation(`/consulta?tipo=solicitacoes&procedimento=${encodeURIComponent(especialidade)}`);
   };
 
-  // Auth check
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="text-muted-foreground">Carregando...</p>
-        </div>
+        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -321,788 +190,460 @@ export default function Dashboard() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="w-full max-w-md mx-4">
           <CardHeader className="text-center">
-            <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <BarChart3 className="h-6 w-6 text-primary" />
-            </div>
             <CardTitle>Acesso Restrito</CardTitle>
-            <CardDescription>Faça login para acessar o dashboard</CardDescription>
           </CardHeader>
           <CardContent>
-            <a href={getLoginUrl()}>
-              <Button className="w-full">Fazer Login</Button>
-            </a>
+            <Link href="/">
+              <Button className="w-full">Ir para Login</Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  const dashboardData = aggregateMutation.data?.data;
-
-  // Build active filters summary
-  const activeFilters: string[] = [];
-  if (indexType === "marcacao") activeFilters.push("Marcações Ambulatoriais");
-  else activeFilters.push("Solicitações Ambulatoriais (Fila)");
-  if (mode !== "quick" && mode !== "fila") activeFilters.push(`Modo: ${mode}`);
-  if (dateStart && dateEnd) activeFilters.push(`Período: ${dateStart} a ${dateEnd}`);
-  if (selectedProcedimentos.length > 0) activeFilters.push(`${selectedProcedimentos.length} procedimento(s) filtrado(s)`);
-
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container flex h-14 items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/">
-              <div className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Database className="h-4 w-4" />
-                </div>
-                <div>
-                  <h1 className="text-sm font-semibold leading-tight">SISREG Dashboard</h1>
-                  <p className="text-[10px] text-muted-foreground">Macaé - RJ</p>
-                </div>
-              </div>
-            </Link>
+    <DashboardLayout>
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              <Activity className="h-6 w-6 text-blue-500" />
+              Dashboard de Fila de Consultas
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Apenas consultas com profissionais de saúde — exames e procedimentos excluídos automaticamente
+            </p>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/consulta">
-              <Button variant="outline" size="sm" className="h-8 text-xs">
-                <Database className="mr-1 h-3 w-3" />
-                Consulta
-              </Button>
-            </Link>
+            {hasLoaded && dashData && (
+              <Badge variant="outline" className="text-xs">
+                {dashData.totalUnfiltered.toLocaleString("pt-BR")} registros no período
+              </Badge>
+            )}
             <Link href="/configuracao">
-              <Button variant="outline" size="sm" className="h-8 text-xs">
-                <Settings className="mr-1 h-3 w-3" />
+              <Button variant="outline" size="sm" className="gap-1">
+                <Settings className="h-3.5 w-3.5" />
                 Config
               </Button>
             </Link>
           </div>
         </div>
-      </header>
 
-      <main className="container py-4">
-        {/* Config Warning */}
-        {!configQuery.data && !configQuery.isLoading && (
-          <Card className="mb-4 border-amber-500/50 bg-amber-500/5">
-            <CardContent className="flex items-center gap-3 py-3">
-              <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Configure suas credenciais do SISREG</p>
-              </div>
-              <Link href="/configuracao">
-                <Button size="sm" className="h-7 text-xs">Configurar</Button>
-              </Link>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Filters - Compact */}
-        <Card className="mb-4">
-          <CardContent className="pt-4 pb-3">
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6 items-end">
-              {/* Index Type */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Tipo</Label>
-                <Select value={indexType} onValueChange={(v) => setIndexType(v as IndexType)}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="marcacao">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" /> Marcações
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="solicitacao">
-                      <span className="flex items-center gap-1">
-                        <FileText className="h-3 w-3" /> Solicitações (Fila)
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Mode */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Modo</Label>
-                {indexType === "solicitacao" ? (
-                  <div className="h-8 flex items-center px-2 rounded-md border bg-muted/50 text-xs">
-                    <FileText className="h-3 w-3 mr-1" /> Fila
-                  </div>
-                ) : (
-                  <Select value={mode} onValueChange={(v) => setMode(v as QueryMode)}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="quick"><span className="flex items-center gap-1"><Zap className="h-3 w-3" /> Rápida</span></SelectItem>
-                      <SelectItem value="novas"><span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Novas</span></SelectItem>
-                      <SelectItem value="agendadas"><span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> Agendadas</span></SelectItem>
-                      <SelectItem value="atendidas"><span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Atendidas</span></SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              {/* Date Range */}
-              {mode !== "quick" && mode !== "fila" ? (
-                <>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Data Inicial</Label>
-                    <Input type="date" value={dateStart} onChange={(e) => setDateStart(e.target.value)} className="h-8 text-xs" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Data Final</Label>
-                    <Input type="date" value={dateEnd} onChange={(e) => setDateEnd(e.target.value)} className="h-8 text-xs" />
-                  </div>
-                </>
-              ) : (
-                <div className="lg:col-span-2" />
-              )}
-
-              {/* Actions */}
-              <div className="flex items-end gap-1 lg:col-span-2">
-                <Button
-                  onClick={handleLoadDashboard}
-                  disabled={aggregateMutation.isPending || !configQuery.data}
-                  className="flex-1 h-8 text-xs"
-                >
-                  {aggregateMutation.isPending ? (
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-1 h-3 w-3" />
-                  )}
-                  Carregar
-                </Button>
-                {dashboardData && (
+        {/* Painel de Filtros */}
+        <Card className="border-blue-200 bg-blue-50/30 dark:bg-blue-950/10 dark:border-blue-900">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <Filter className="h-4 w-4" />
+              Filtros do Dashboard
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Período */}
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">
+                <Calendar className="h-3 w-3 inline mr-1" />
+                Período
+              </Label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {PERIOD_PRESETS.map((preset, idx) => (
                   <Button
-                    variant="outline"
-                    onClick={handleExportExcel}
-                    disabled={exportMutation.isPending}
-                    className="h-8 text-xs"
+                    key={idx}
+                    variant={!isCustomPeriod && selectedPreset === idx ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => { setSelectedPreset(idx); setIsCustomPeriod(false); }}
                   >
-                    {exportMutation.isPending ? (
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                    ) : (
-                      <Download className="mr-1 h-3 w-3" />
-                    )}
-                    XLSX
+                    {preset.label}
                   </Button>
-                )}
+                ))}
+                <Button
+                  variant={isCustomPeriod ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setIsCustomPeriod(true)}
+                >
+                  Personalizado
+                </Button>
+              </div>
+              {isCustomPeriod && (
+                <div className="flex gap-2 items-center mt-2">
+                  <input
+                    type="date"
+                    value={customDateStart}
+                    onChange={e => setCustomDateStart(e.target.value)}
+                    className="border rounded px-2 py-1 text-sm bg-background"
+                  />
+                  <span className="text-muted-foreground text-sm">até</span>
+                  <input
+                    type="date"
+                    value={customDateEnd}
+                    onChange={e => setCustomDateEnd(e.target.value)}
+                    className="border rounded px-2 py-1 text-sm bg-background"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Situação */}
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">
+                Situação (múltipla seleção)
+              </Label>
+              <div className="flex flex-wrap gap-3">
+                {SITUACOES_SOLICITACAO.map(s => (
+                  <div key={s.value} className="flex items-center gap-1.5">
+                    <Checkbox
+                      id={`sit-${s.value}`}
+                      checked={situacaoFilter.includes(s.value)}
+                      onCheckedChange={() => toggleSituacao(s.value)}
+                    />
+                    <Label htmlFor={`sit-${s.value}`} className="text-xs cursor-pointer">
+                      {s.label}
+                    </Label>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Procedimento Filter */}
-            {dashboardData && (
-              <div className="mt-3 pt-3 border-t">
-                <div className="flex items-center justify-between">
-                  <button
-                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                    onClick={() => setShowProcedimentoFilter(!showProcedimentoFilter)}
-                  >
-                    <Filter className="h-3 w-3" />
-                    Filtrar por Procedimentos ({selectedProcedimentos.length} selecionados)
-                  </button>
-                  {selectedProcedimentos.length > 0 && (
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => setSelectedProcedimentos([])}>
-                        Limpar
-                      </Button>
-                      <Button size="sm" className="h-6 text-[10px] px-2" onClick={handleApplyProcedimentoFilter}>
-                        Aplicar
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                
-                {showProcedimentoFilter && (
-                  <div className="mt-2 space-y-2">
-                    <Input
-                      placeholder="Buscar procedimento..."
-                      value={procedimentoSearch}
-                      onChange={(e) => setProcedimentoSearch(e.target.value)}
-                      className="h-7 text-xs"
+            {/* Risco */}
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">
+                Risco / Prioridade (vazio = todos)
+              </Label>
+              <div className="flex flex-wrap gap-3">
+                {[0, 1, 2, 3].map(r => (
+                  <div key={r} className="flex items-center gap-1.5">
+                    <Checkbox
+                      id={`risco-${r}`}
+                      checked={riscoFilter.includes(String(r))}
+                      onCheckedChange={() => toggleRisco(String(r))}
                     />
-                    <ScrollArea className="h-[150px] border rounded-md p-1">
-                      {filteredProcedimentos.map((proc) => (
-                        <div
-                          key={proc}
-                          className="flex items-center gap-2 py-0.5 cursor-pointer hover:bg-muted/50 px-2 rounded text-xs"
-                          onClick={() => toggleProcedimento(proc)}
-                        >
-                          <Checkbox checked={selectedProcedimentos.includes(proc)} className="pointer-events-none h-3 w-3" />
-                          <span className="truncate">{proc}</span>
-                        </div>
-                      ))}
-                    </ScrollArea>
+                    <Label htmlFor={`risco-${r}`} className="text-xs cursor-pointer">
+                      <span
+                        className="inline-block w-2 h-2 rounded-full mr-1"
+                        style={{ backgroundColor: RISCO_COLORS[String(r)] }}
+                      />
+                      {RISK_LABELS[r]}
+                    </Label>
                   </div>
-                )}
+                ))}
               </div>
-            )}
+            </div>
+
+            {/* Botão Atualizar */}
+            <div className="pt-1 flex items-center gap-3 flex-wrap">
+              <Button
+                onClick={handleLoadDashboard}
+                disabled={isLoading}
+                className="gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                {isLoading ? "Carregando..." : hasLoaded ? "Atualizar Dashboard" : "Carregar Dashboard"}
+              </Button>
+              {hasLoaded && dashData && (
+                <span className="text-xs text-muted-foreground">
+                  Período: {dashData.dateStart} a {dashData.dateEnd} •{" "}
+                  <strong>{dashData.totalFila.toLocaleString("pt-BR")}</strong> consultas filtradas
+                </span>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        {/* Dashboard Content */}
-        {dashboardData ? (
-          <>
-            {/* Active Filters Summary + KPIs Row */}
-            <div className="flex flex-wrap gap-1 mb-3">
-              {activeFilters.map((f, i) => (
-                <Badge key={i} variant="secondary" className="text-[10px] h-5">
-                  {f}
-                </Badge>
-              ))}
-            </div>
-
-            {/* Summary KPIs - Compact */}
-            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-4">
-              <Card className="py-0">
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Database className="h-4 w-4 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-xl font-bold leading-tight">{dashboardData.total.toLocaleString("pt-BR")}</p>
-                      <p className="text-[10px] text-muted-foreground">Total Registros</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="py-0">
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                      <TrendingUp className="h-4 w-4 text-emerald-500" />
-                    </div>
-                    <div>
-                      <p className="text-xl font-bold leading-tight">{dashboardData.byUnidade.length}</p>
-                      <p className="text-[10px] text-muted-foreground">Unidades</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="py-0">
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-                      <BarChart3 className="h-4 w-4 text-amber-500" />
-                    </div>
-                    <div>
-                      <p className="text-xl font-bold leading-tight">{dashboardData.byProcedimento.length}</p>
-                      <p className="text-[10px] text-muted-foreground">Procedimentos</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              <Card className="py-0">
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                      <FileSpreadsheet className="h-4 w-4 text-blue-500" />
-                    </div>
-                    <div>
-                      <p className="text-xl font-bold leading-tight">{dashboardData.totalUnfiltered.toLocaleString("pt-BR")}</p>
-                      <p className="text-[10px] text-muted-foreground">Total Disponível</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Métricas Acumuladas - Últimos 3 Anos */}
-            {indexType === "solicitacao" && (
-              <div className="mb-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-primary" />
-                  <h2 className="text-sm font-semibold">Período Acumulado (3 Anos) - Procedimentos "CONSULTA EM"</h2>
-                </div>
-
-                {/* Cards de Métricas Acumuladas */}
-                <div className="grid gap-3 grid-cols-1 lg:grid-cols-3">
-                  {/* FILA DE ESPERA */}
-                  <Card>
-                    <CardHeader className="pb-2 pt-3 px-4">
-                      <CardTitle className="text-xs">SOLICITAÇÃO / PENDENTE / FILA DE ESPERA</CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-3">
-                      {metricsFilaEsperaMutation.isPending ? (
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="text-xs">Carregando...</span>
-                        </div>
-                      ) : metricsFilaEsperaMutation.data?.ok ? (
-                        <>
-                          <div className="text-2xl font-bold text-blue-600">
-                            {metricsFilaEsperaMutation.data.data?.totalAccumulated.toLocaleString("pt-BR")}
-                          </div>
-                          <p className="text-[10px] text-muted-foreground mt-1">Total acumulado</p>
-                          <p className="text-[10px] text-muted-foreground mt-2">
-                            Período: {metricsFilaEsperaMutation.data.data?.dateStart} a {metricsFilaEsperaMutation.data.data?.dateEnd}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-xs text-red-500">Erro ao carregar</p>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* REGULADOR */}
-                  <Card>
-                    <CardHeader className="pb-2 pt-3 px-4">
-                      <CardTitle className="text-xs">SOLICITAÇÃO / PENDENTE / REGULADOR</CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-3">
-                      {metricsReguladoMutation.isPending ? (
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="text-xs">Carregando...</span>
-                        </div>
-                      ) : metricsReguladoMutation.data?.ok ? (
-                        <>
-                          <div className="text-2xl font-bold text-amber-600">
-                            {metricsReguladoMutation.data.data?.totalAccumulated.toLocaleString("pt-BR")}
-                          </div>
-                          <p className="text-[10px] text-muted-foreground mt-1">Total acumulado</p>
-                          <p className="text-[10px] text-muted-foreground mt-2">
-                            Período: {metricsReguladoMutation.data.data?.dateStart} a {metricsReguladoMutation.data.data?.dateEnd}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-xs text-red-500">Erro ao carregar</p>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* AGENDADA FILA DE ESPERA */}
-                  <Card>
-                    <CardHeader className="pb-2 pt-3 px-4">
-                      <CardTitle className="text-xs">SOLICITAÇÃO / AGENDADA / FILA DE ESPERA</CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-3">
-                      {metricsAgendadaMutation.isPending ? (
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="text-xs">Carregando...</span>
-                        </div>
-                      ) : metricsAgendadaMutation.data?.ok ? (
-                        <>
-                          <div className="text-2xl font-bold text-green-600">
-                            {metricsAgendadaMutation.data.data?.totalAccumulated.toLocaleString("pt-BR")}
-                          </div>
-                          <p className="text-[10px] text-muted-foreground mt-1">Total acumulado</p>
-                          <p className="text-[10px] text-muted-foreground mt-2">
-                            Período: {metricsAgendadaMutation.data.data?.dateStart} a {metricsAgendadaMutation.data.data?.dateEnd}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-xs text-red-500">Erro ao carregar</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            )}
-
-            {/* Métricas Gerenciais - Apenas para Solicitações */}
-            {indexType === "solicitacao" && topProcedures.data?.ok && averageWaitTime.data?.ok && (
-              <div className="mb-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-primary" />
-                  <h2 className="text-sm font-semibold">Métricas Gerenciais</h2>
-                </div>
-
-                {/* Cards de Métricas */}
-                <div className="grid gap-3 grid-cols-1 lg:grid-cols-3">
-                  <Card>
-                    <CardHeader className="pb-2 pt-3 px-4">
-                      <CardTitle className="text-xs flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        Tempo Médio de Espera
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-3">
-                      <div className="text-2xl font-bold">
-                        {averageWaitTime.data.data.length > 0
-                          ? Math.round(
-                              averageWaitTime.data.data.reduce((sum, item) => sum + item.mediaDias, 0) /
-                                averageWaitTime.data.data.length
-                            )
-                          : 0}{" "}
-                        dias
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-1">Média geral da fila</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2 pt-3 px-4">
-                      <CardTitle className="text-xs flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        Maior Tempo de Espera
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-3">
-                      <div className="text-2xl font-bold text-red-600">
-                        {averageWaitTime.data.data.length > 0 ? averageWaitTime.data.data[0].mediaDias : 0} dias
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-1 truncate">
-                        {averageWaitTime.data.data.length > 0 ? averageWaitTime.data.data[0].descricao : "N/A"}
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2 pt-3 px-4">
-                      <CardTitle className="text-xs flex items-center gap-1">
-                        <BarChart3 className="h-3 w-3" />
-                        Procedimento Mais Solicitado
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-3">
-                      <div className="text-2xl font-bold">
-                        {topProcedures.data.data.length > 0 ? topProcedures.data.data[0].total : 0}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-1 truncate">
-                        {topProcedures.data.data.length > 0 ? topProcedures.data.data[0].descricao : "N/A"}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Gráfico de Top 10 Procedimentos */}
-                <Card>
-                  <CardHeader className="pb-1 pt-3 px-4">
-                    <CardTitle className="text-xs flex items-center gap-1">
-                      <BarChart3 className="h-3 w-3" />
-                      Top 10 Procedimentos Mais Solicitados
-                    </CardTitle>
-                    <CardDescription className="text-[10px]">Volume de solicitações por procedimento</CardDescription>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <div className="h-[300px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={topProcedures.data.data.map((item) => ({
-                            nome: item.descricao.length > 35 ? item.descricao.substring(0, 35) + "..." : item.descricao,
-                            total: item.total,
-                            nomeCompleto: item.descricao,
-                          }))}
-                          layout="vertical"
-                          margin={{ top: 2, right: 20, left: 10, bottom: 2 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                          <XAxis type="number" tick={{ fontSize: 10 }} />
-                          <YAxis
-                            type="category"
-                            dataKey="nome"
-                            width={180}
-                            tick={{ fontSize: 9 }}
-                          />
-                          <Tooltip
-                            content={({ active, payload }) => {
-                              if (active && payload && payload.length) {
-                                return (
-                                  <div className="bg-background border rounded-lg p-2 shadow-lg">
-                                    <p className="font-medium text-xs">{payload[0].payload.nomeCompleto}</p>
-                                    <p className="text-[10px] text-muted-foreground">
-                                      Total: {payload[0].value} solicitações
-                                    </p>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            }}
-                          />
-                          <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 3, 3, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Tabela de Tempo Médio de Espera */}
-                <Card>
-                  <CardHeader className="pb-1 pt-3 px-4">
-                    <CardTitle className="text-xs flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      Tempo Médio de Espera por Procedimento
-                    </CardTitle>
-                    <CardDescription className="text-[10px]">Top 15 procedimentos com maior tempo de espera</CardDescription>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-[10px]">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left p-1">#</th>
-                            <th className="text-left p-1">Procedimento</th>
-                            <th className="text-right p-1">Média (dias)</th>
-                            <th className="text-right p-1">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {averageWaitTime.data.data.slice(0, 15).map((item, index) => (
-                            <tr key={index} className="border-b hover:bg-muted/50">
-                              <td className="p-1">{index + 1}</td>
-                              <td className="p-1 text-[9px]">{item.descricao}</td>
-                              <td className="text-right p-1 font-semibold">
-                                <span
-                                  className={
-                                    item.mediaDias > 90
-                                      ? "text-red-600"
-                                      : item.mediaDias > 60
-                                      ? "text-yellow-600"
-                                      : "text-green-600"
-                                  }
-                                >
-                                  {item.mediaDias}
-                                </span>
-                              </td>
-                              <td className="text-right p-1">{item.totalSolicitacoes}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {/* Auto-Insights */}
-            {dashboardData.autoInsights && dashboardData.autoInsights.length > 0 && (
-              <Card className="mb-4 border-blue-500/30 bg-blue-500/5">
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-start gap-2">
-                    <Lightbulb className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
-                    <div className="flex-1 space-y-1">
-                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">Insights Automáticos</p>
-                      <div className="grid gap-1">
-                        {dashboardData.autoInsights.map((insight, i) => (
-                          <div key={i} className="text-xs text-muted-foreground">
-                            <Streamdown>{insight}</Streamdown>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="pt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 text-[10px]"
-                          onClick={handleGenerateLlmInsights}
-                          disabled={insightsMutation.isPending}
-                        >
-                          {insightsMutation.isPending ? (
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          ) : (
-                            <Lightbulb className="mr-1 h-3 w-3" />
-                          )}
-                          Gerar análise detalhada com IA
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* LLM Insights */}
-            {showLlmInsights && insightsMutation.data?.ok && (
-              <Card className="mb-4 border-purple-500/30 bg-purple-500/5">
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-start gap-2">
-                    <Lightbulb className="h-4 w-4 text-purple-500 mt-0.5 shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 mb-2">Análise Detalhada (IA)</p>
-                      <div className="text-xs prose prose-sm max-w-none dark:prose-invert">
-                        <Streamdown>{insightsMutation.data.insights}</Streamdown>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Charts Row 1 - Compact */}
-            <div className="grid gap-4 lg:grid-cols-2 mb-4">
-              {/* By Unidade */}
-              <Card>
-                <CardHeader className="pb-1 pt-3 px-4">
-                  <CardTitle className="text-xs flex items-center gap-1">
-                    <BarChart3 className="h-3 w-3" />
-                    Distribuição por Unidade
-                  </CardTitle>
-                  <CardDescription className="text-[10px]">Top 15 unidades</CardDescription>
-                </CardHeader>
-                <CardContent className="px-4 pb-3">
-                  <div className="h-[260px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={dashboardData.byUnidade}
-                        layout="vertical"
-                        margin={{ top: 2, right: 20, left: 10, bottom: 2 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                        <XAxis type="number" tick={{ fontSize: 10 }} />
-                        <YAxis
-                          type="category"
-                          dataKey="name"
-                          width={140}
-                          tick={{ fontSize: 9 }}
-                          tickFormatter={(value) => value.length > 22 ? value.substring(0, 22) + "…" : value}
-                        />
-                        <Tooltip
-                          formatter={(value: number) => [value.toLocaleString("pt-BR"), "Qtd"]}
-                          labelFormatter={(label) => label}
-                          contentStyle={{ fontSize: 11 }}
-                        />
-                        <Bar dataKey="value" fill="#0088FE" radius={[0, 3, 3, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* By Procedimento */}
-              <Card>
-                <CardHeader className="pb-1 pt-3 px-4">
-                  <CardTitle className="text-xs flex items-center gap-1">
-                    <BarChart3 className="h-3 w-3" />
-                    Distribuição por Procedimento
-                  </CardTitle>
-                  <CardDescription className="text-[10px]">Top 15 procedimentos</CardDescription>
-                </CardHeader>
-                <CardContent className="px-4 pb-3">
-                  <div className="h-[260px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={dashboardData.byProcedimento}
-                        layout="vertical"
-                        margin={{ top: 2, right: 20, left: 10, bottom: 2 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                        <XAxis type="number" tick={{ fontSize: 10 }} />
-                        <YAxis
-                          type="category"
-                          dataKey="name"
-                          width={140}
-                          tick={{ fontSize: 9 }}
-                          tickFormatter={(value) => value.length > 22 ? value.substring(0, 22) + "…" : value}
-                        />
-                        <Tooltip
-                          formatter={(value: number) => [value.toLocaleString("pt-BR"), "Qtd"]}
-                          labelFormatter={(label) => label}
-                          contentStyle={{ fontSize: 11 }}
-                        />
-                        <Bar dataKey="value" fill="#00C49F" radius={[0, 3, 3, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Charts Row 2 - Compact */}
-            <div className="grid gap-4 lg:grid-cols-2">
-              {/* By Risco */}
-              <Card>
-                <CardHeader className="pb-1 pt-3 px-4">
-                  <CardTitle className="text-xs flex items-center gap-1">
-                    <PieChart className="h-3 w-3" />
-                    Classificação de Risco
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-3">
-                  <div className="h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsPieChart>
-                        <Pie
-                          data={dashboardData.byRisco}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, percent }) => `${formatRiskLabel(name)} (${(percent * 100).toFixed(0)}%)`}
-                          outerRadius={70}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {dashboardData.byRisco.map((entry, index) => (
-                            <Cell
-                              key={`cell-${index}`}
-                              fill={RISK_COLORS[entry.name] || COLORS[index % COLORS.length]}
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value: number, name: string) => [value.toLocaleString("pt-BR"), formatRiskLabel(name)]}
-                          contentStyle={{ fontSize: 11 }}
-                        />
-                      </RechartsPieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* By Status */}
-              <Card>
-                <CardHeader className="pb-1 pt-3 px-4">
-                  <CardTitle className="text-xs flex items-center gap-1">
-                    <PieChart className="h-3 w-3" />
-                    Status
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-3">
-                  <div className="h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsPieChart>
-                        <Pie
-                          data={dashboardData.byStatus}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                          outerRadius={70}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {dashboardData.byStatus.map((_entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value: number) => [value.toLocaleString("pt-BR"), "Qtd"]}
-                          contentStyle={{ fontSize: 11 }}
-                        />
-                      </RechartsPieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </>
-        ) : (
-          /* Empty State */
-          <Card>
-            <CardContent className="py-10 text-center">
-              <BarChart3 className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-              <p className="text-sm font-medium">Dashboard Vazio</p>
-              <p className="text-xs text-muted-foreground mb-3">
-                Configure os filtros e clique em "Carregar" para visualizar os gráficos
+        {/* Erro */}
+        {errorMsg && (
+          <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
+            <CardContent className="pt-4">
+              <p className="text-sm text-red-700 dark:text-red-400 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                {errorMsg}
               </p>
-              <Button onClick={handleLoadDashboard} disabled={!configQuery.data} size="sm">
-                <RefreshCw className="mr-1 h-3 w-3" />
-                Carregar Dashboard
-              </Button>
             </CardContent>
           </Card>
         )}
-      </main>
-    </div>
+
+        {/* Estado inicial */}
+        {!hasLoaded && !isLoading && !errorMsg && (
+          <Card className="border-dashed">
+            <CardContent className="py-16 text-center">
+              <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-40" />
+              <p className="text-muted-foreground text-sm">
+                Configure os filtros acima e clique em{" "}
+                <strong>Carregar Dashboard</strong> para visualizar os dados.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Dados carregados */}
+        {hasLoaded && dashData && (
+          <>
+            {/* Cards de Métricas */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="border-blue-200 dark:border-blue-900">
+                <CardContent className="pt-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Total na Fila</p>
+                      <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">
+                        {dashData.totalFila.toLocaleString("pt-BR")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">consultas</p>
+                    </div>
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <ClipboardList className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-amber-200 dark:border-amber-900">
+                <CardContent className="pt-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Pendentes</p>
+                      <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-1">
+                        {dashData.totalPendentes.toLocaleString("pt-BR")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">aguardando vaga</p>
+                    </div>
+                    <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                      <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-red-200 dark:border-red-900">
+                <CardContent className="pt-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Devolvidas</p>
+                      <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-1">
+                        {dashData.totalDevolvidas.toLocaleString("pt-BR")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">requer ação</p>
+                    </div>
+                    <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                      <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-green-200 dark:border-green-900">
+                <CardContent className="pt-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Agendadas</p>
+                      <p className="text-3xl font-bold text-green-600 dark:text-green-400 mt-1">
+                        {dashData.totalAgendadas.toLocaleString("pt-BR")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">reguladas</p>
+                    </div>
+                    <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                      <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Gráficos: Top 10 + Risco */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Top 10 Especialidades */}
+              <Card className="lg:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-blue-500" />
+                    Top 10 Especialidades — Maior Demanda
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">Clique em uma barra para filtrar na página de Consultas</p>
+                </CardHeader>
+                <CardContent>
+                  {dashData.top10Especialidades.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">Nenhum dado disponível</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart
+                        data={dashData.top10Especialidades.map((e, i) => ({
+                          ...e,
+                          shortName: simplifyEspecialidade(e.name),
+                          fill: BAR_COLORS[i % BAR_COLORS.length],
+                        }))}
+                        layout="vertical"
+                        margin={{ top: 0, right: 40, left: 0, bottom: 0 }}
+                        onClick={(data) => {
+                          if (data?.activePayload?.[0]?.payload?.name) {
+                            handleClickEspecialidade(data.activePayload[0].payload.name);
+                          }
+                        }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11 }} />
+                        <YAxis
+                          type="category"
+                          dataKey="shortName"
+                          width={130}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip
+                          formatter={(value: number) => [value.toLocaleString("pt-BR"), "Solicitações"]}
+                          labelFormatter={(label) => `Especialidade: ${label}`}
+                        />
+                        <Bar dataKey="value" radius={[0, 4, 4, 0]} cursor="pointer">
+                          {dashData.top10Especialidades.map((_, i) => (
+                            <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Distribuição por Risco */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-orange-500" />
+                    Distribuição por Risco
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {dashData.byRisco.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">Nenhum dado disponível</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <PieChart>
+                        <Pie
+                          data={dashData.byRisco.map(r => ({
+                            ...r,
+                            displayName: RISCO_LABELS_DISPLAY[r.name] || `Risco ${r.name}`,
+                            fill: RISCO_COLORS[r.name] || "#6b7280",
+                          }))}
+                          dataKey="value"
+                          nameKey="displayName"
+                          cx="50%"
+                          cy="45%"
+                          outerRadius={85}
+                          label={({ percent }: { percent: number }) =>
+                            percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ""
+                          }
+                          labelLine={false}
+                        >
+                          {dashData.byRisco.map((r, i) => (
+                            <Cell key={i} fill={RISCO_COLORS[r.name] || "#6b7280"} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value: number) => [value.toLocaleString("pt-BR"), "Solicitações"]}
+                        />
+                        <Legend
+                          formatter={(value) => <span className="text-xs">{value}</span>}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Distribuição por Situação */}
+            {dashData.bySituacao.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-purple-500" />
+                    Distribuição por Situação
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-3">
+                    {dashData.bySituacao
+                      .sort((a, b) => b.value - a.value)
+                      .map((s, i) => {
+                        const total = dashData.totalFila || 1;
+                        const pct = ((s.value / total) * 100).toFixed(1);
+                        return (
+                          <div key={i} className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2 min-w-[200px]">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium truncate">{s.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {s.value.toLocaleString("pt-BR")} ({pct}%)
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Tabela: Solicitações Mais Antigas */}
+            {dashData.maisAntigas.length > 0 && (
+              <Card className="border-red-200 dark:border-red-900">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-red-700 dark:text-red-400">
+                    <AlertTriangle className="h-4 w-4" />
+                    Solicitações Pendentes Mais Antigas — Ação Urgente
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">Top 10 consultas com maior tempo na fila</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left">
+                          <th className="pb-2 text-xs font-semibold text-muted-foreground pr-4">Procedimento</th>
+                          <th className="pb-2 text-xs font-semibold text-muted-foreground pr-4">Dias na Fila</th>
+                          <th className="pb-2 text-xs font-semibold text-muted-foreground pr-4">Risco</th>
+                          <th className="pb-2 text-xs font-semibold text-muted-foreground">Unidade</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dashData.maisAntigas.map((s, i) => (
+                          <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="py-2 pr-4 font-medium text-xs">
+                              {simplifyEspecialidade(s.descricao) || s.descricao}
+                            </td>
+                            <td className="py-2 pr-4">
+                              <Badge
+                                variant={s.diasEspera > 365 ? "destructive" : s.diasEspera > 180 ? "secondary" : "outline"}
+                                className="text-xs"
+                              >
+                                {s.diasEspera} dias
+                              </Badge>
+                            </td>
+                            <td className="py-2 pr-4">
+                              <span
+                                className="text-xs font-medium"
+                                style={{ color: RISCO_COLORS[s.risco] || "#6b7280" }}
+                              >
+                                {RISCO_LABELS_DISPLAY[s.risco] || `Risco ${s.risco}`}
+                              </span>
+                            </td>
+                            <td className="py-2 text-xs text-muted-foreground truncate max-w-[200px]">
+                              {s.unidade || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
+      </div>
+    </DashboardLayout>
   );
 }

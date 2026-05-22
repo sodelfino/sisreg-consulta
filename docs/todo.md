@@ -140,3 +140,15 @@
 - [x] Persistir preferência no localStorage
 - [x] Quando desativado, voltar ao modo texto livre
 - [x] Testes passaram (140/142 - 2 falhas pré-existentes)
+
+## Redesign: Dashboard Focado em Consultas Profissionais
+- [x] Criar endpoint dashboard.consultasFila com filtros de consultas profissionais
+- [x] Implementar filtros interativos: Período (presets + custom), Situação (multi-select), Risco (multi-select)
+- [x] Cards de métricas: Total Fila, Pendentes, Devolvidas, Agendadas
+- [x] Gráfico Top 10 Especialidades com barras horizontais (clicável)
+- [x] Gráfico Distribuição por Risco (pizza)
+- [x] Distribuição por Situação (cards)
+- [x] Tabela Solicitações Mais Antigas (críticas com badge de dias)
+- [x] Clicar em especialidade navega para Consulta.tsx com filtro
+- [x] Filtro de consultas profissionais embutido (isConsultaProfissionalSaude)
+- [x] Testes passaram (140/142 - 2 falhas pré-existentes)

@@ -16,6 +16,7 @@ import {
   deleteFieldSelection,
 } from "./db";
 import { executeSisregSearch, testSisregConnection, listarConsultasProfissionaisDisponiveis } from "./sisreg";
+import { isConsultaProfissionalSaude, PREFIXOS_CONSULTA_VALIDOS } from "../shared/sisreg";
 import { exploreIndex, exploreFieldValues, exploreMapping } from "./explore-index";
 import { IndexType, QueryMode } from "../shared/sisreg";
 import { invokeLLM } from "./_core/llm";
@@ -600,6 +601,153 @@ export const appRouter = router({
             byStatus: topStatus.map(([name, value]) => ({ name, value })),
             allProcedimentos: Array.from(allProcedimentos).sort(),
             autoInsights: insightsList,
+          },
+        };
+      }),
+
+    // Novo endpoint: Dashboard focado em consultas com profissionais de saúde
+    consultasFila: protectedProcedure
+      .input(z.object({
+        dateStart: z.string().optional(),
+        dateEnd: z.string().optional(),
+        situacaoFilter: z.array(z.string()).optional(),
+        riscoFilter: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config = await getSisregConfig(ctx.user.id);
+        if (!config) {
+          return { ok: false, error: "Configuração não encontrada.", data: null };
+        }
+
+        const password = decryptPassword(config.encryptedPassword);
+        const credentials = { baseUrl: config.baseUrl, username: config.username, password };
+
+        // Buscar dados com paginação (até 10000)
+        const allHits: Record<string, unknown>[] = [];
+        let totalRecords = 0;
+        const batchSize = 1000;
+        let currentFrom = 0;
+
+        const firstResult = await executeSisregSearch(credentials, {
+          indexType: "solicitacao",
+          mode: "fila",
+          size: batchSize,
+          from: 0,
+          dateStart: input.dateStart,
+          dateEnd: input.dateEnd,
+          situacaoFilter: input.situacaoFilter,
+          riscoFilter: input.riscoFilter,
+        });
+
+        if (!firstResult.ok) {
+          return { ok: false, error: firstResult.errorMessage || "Erro na consulta.", data: null };
+        }
+
+        totalRecords = firstResult.total;
+        allHits.push(...firstResult.hits);
+        currentFrom = batchSize;
+
+        while (currentFrom < Math.min(totalRecords, 10000) && allHits.length < 10000) {
+          const pageResult = await executeSisregSearch(credentials, {
+            indexType: "solicitacao",
+            mode: "fila",
+            size: batchSize,
+            from: currentFrom,
+            dateStart: input.dateStart,
+            dateEnd: input.dateEnd,
+            situacaoFilter: input.situacaoFilter,
+            riscoFilter: input.riscoFilter,
+          });
+          if (!pageResult.ok || pageResult.hits.length === 0) break;
+          allHits.push(...pageResult.hits);
+          currentFrom += batchSize;
+        }
+
+        // Extrair descrição do procedimento de cada hit (campo nested)
+        function getProcedimentoDesc(hit: Record<string, unknown>): string {
+          const procs = hit.procedimentos;
+          if (Array.isArray(procs) && procs.length > 0) {
+            const p = procs[0] as Record<string, unknown>;
+            return String(p.descricao_interna || p.descricao_sigtap || "").toUpperCase().trim();
+          }
+          return String(
+            hit.descricao_interna_procedimento ||
+            hit.descricao_sigtap_procedimento ||
+            hit.nome_grupo_procedimento || ""
+          ).toUpperCase().trim();
+        }
+
+        // Filtrar apenas consultas com profissionais de saúde
+        const consultaHits = allHits.filter(hit => isConsultaProfissionalSaude(getProcedimentoDesc(hit)));
+
+        // Métricas por situação
+        const bySituacao: Record<string, number> = {};
+        // Métricas por risco
+        const byRisco: Record<string, number> = {};
+        // Top especialidades (procedimentos)
+        const byEspecialidade: Record<string, number> = {};
+        // Solicitações mais antigas (para tabela crítica)
+        const solicitacoesComData: Array<{ descricao: string; dataSolicitacao: string; risco: string; unidade: string; diasEspera: number }> = [];
+        const now = new Date();
+
+        for (const hit of consultaHits) {
+          const situacao = String(hit.sigla_situacao || "");
+          if (situacao) bySituacao[situacao] = (bySituacao[situacao] || 0) + 1;
+
+          const risco = String(hit.codigo_classificacao_risco ?? "");
+          if (risco !== "") byRisco[risco] = (byRisco[risco] || 0) + 1;
+
+          const desc = getProcedimentoDesc(hit);
+          if (desc) byEspecialidade[desc] = (byEspecialidade[desc] || 0) + 1;
+
+          const dataSol = String(hit.data_solicitacao || "");
+          if (dataSol) {
+            const d = new Date(dataSol);
+            const diasEspera = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+            solicitacoesComData.push({
+              descricao: desc,
+              dataSolicitacao: dataSol,
+              risco: risco,
+              unidade: String(hit.nome_unidade_solicitante || ""),
+              diasEspera,
+            });
+          }
+        }
+
+        // Top 10 especialidades
+        const top10Especialidades = Object.entries(byEspecialidade)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10)
+          .map(([name, value]) => ({ name, value }));
+
+        // 10 solicitações mais antigas
+        const maisAntigas = solicitacoesComData
+          .sort((a, b) => b.diasEspera - a.diasEspera)
+          .slice(0, 10);
+
+        // Contagem por situação simplificada
+        const totalFila = consultaHits.length;
+        const totalPendentes = (bySituacao["SOLICITAÇÃO / PENDENTE / FILA DE ESPERA"] || 0) +
+          (bySituacao["SOLICITAÇÃO / PENDENTE / REGULADOR"] || 0);
+        const totalDevolvidas = bySituacao["SOLICITAÇÃO / DEVOLVIDA / SOLICITANTE"] || 0;
+        const totalAgendadas = (bySituacao["SOLICITAÇÃO / AGENDADA / FILA DE ESPERA"] || 0) +
+          (bySituacao["SOLICITAÇÃO / AUTORIZADA / REGULADOR"] || 0);
+
+        return {
+          ok: true,
+          error: null,
+          data: {
+            totalFila,
+            totalPendentes,
+            totalDevolvidas,
+            totalAgendadas,
+            totalUnfiltered: totalRecords,
+            bySituacao: Object.entries(bySituacao).map(([name, value]) => ({ name, value })),
+            byRisco: Object.entries(byRisco).map(([name, value]) => ({ name, value })),
+            top10Especialidades,
+            maisAntigas,
+            dateStart: input.dateStart,
+            dateEnd: input.dateEnd,
           },
         };
       }),
