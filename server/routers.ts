@@ -16,7 +16,7 @@ import {
   deleteFieldSelection,
 } from "./db";
 import { executeSisregSearch, testSisregConnection, listarConsultasProfissionaisDisponiveis } from "./sisreg";
-import { isConsultaProfissionalSaude, PREFIXOS_CONSULTA_VALIDOS } from "../shared/sisreg";
+import { isConsultaProfissionalSaude, PREFIXOS_CONSULTA_VALIDOS, SITUACAO_LABELS, RISK_LABELS, ALL_FIELDS_MARCACAO, ALL_FIELDS_SOLICITACAO } from "../shared/sisreg";
 import { exploreIndex, exploreFieldValues, exploreMapping } from "./explore-index";
 import { IndexType, QueryMode } from "../shared/sisreg";
 import { invokeLLM } from "./_core/llm";
@@ -298,26 +298,129 @@ export const appRouter = router({
           totalRecords = result.total;
         }
 
+        // ============================================================
+        // Helper functions to match the table display
+        // ============================================================
+        const formatCellValueXlsx = (key: string, value: unknown, hit: Record<string, unknown>): string => {
+          if (value === null || value === undefined || value === "") {
+            // Fallback para descrição de procedimento: tentar array procedimentos[]
+            if (key === "descricao_interna_procedimento" && hit) {
+              if (hit.procedimentos && Array.isArray(hit.procedimentos) && hit.procedimentos.length > 0) {
+                const proc = hit.procedimentos[0] as Record<string, unknown>;
+                if (proc.descricao_interna) return String(proc.descricao_interna);
+                if (proc.descricao_sigtap) return String(proc.descricao_sigtap);
+                if (proc.codigo_interno) return `Código: ${proc.codigo_interno}`;
+              }
+              if (hit.descricao_procedimento) return String(hit.descricao_procedimento);
+              if (hit.nome_procedimento) return String(hit.nome_procedimento);
+              if (hit.procedimento) return String(hit.procedimento);
+              if (hit.descricao_sigtap_procedimento) return String(hit.descricao_sigtap_procedimento);
+              if (hit.nome_grupo_procedimento) return String(hit.nome_grupo_procedimento);
+            }
+            return "";
+          }
+          // Formatar datas
+          if (key.startsWith("data_") || key.startsWith("dt_")) {
+            try {
+              const date = new Date(String(value));
+              if (!isNaN(date.getTime())) {
+                return date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+              }
+            } catch { /* fallthrough */ }
+          }
+          // Traduzir classificação de risco
+          if (key === "codigo_classificacao_risco") {
+            const riskNum = Number(value);
+            return RISK_LABELS[riskNum] || String(value);
+          }
+          // Traduzir situação
+          if (key === "sigla_situacao") {
+            return SITUACAO_LABELS[String(value)] || String(value);
+          }
+          return String(value);
+        };
+
+        // Calcular tempo de espera
+        const calcularTempoEsperaXlsx = (dataSolicitacao: unknown): string => {
+          if (!dataSolicitacao) return "";
+          try {
+            const dataStr = String(dataSolicitacao);
+            const data = dataStr.includes("T") ? new Date(dataStr) : new Date(dataStr);
+            if (isNaN(data.getTime())) return "";
+            const hoje = new Date();
+            const diffMs = hoje.getTime() - data.getTime();
+            const dias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            const meses = Math.floor(dias / 30);
+            if (meses >= 1) {
+              const diasRestantes = dias - (meses * 30);
+              return `${meses} ${meses === 1 ? "mês" : "meses"}, ${diasRestantes} dias`;
+            }
+            return `${dias} ${dias === 1 ? "dia" : "dias"}`;
+          } catch { return ""; }
+        };
+
+        // Definir colunas iguais à tabela na tela
+        const allFields = input.indexType === "marcacao" ? ALL_FIELDS_MARCACAO : ALL_FIELDS_SOLICITACAO;
+        const fieldLabelMap: Record<string, string> = {};
+        for (const f of allFields) fieldLabelMap[f.key] = f.label;
+        fieldLabelMap["nome_unidade_executante"] = "Estabelecimento";
+        fieldLabelMap["nome_unidade_solicitante"] = "Unidade Solicitante";
+        fieldLabelMap["__tempo_espera"] = "Tempo de Espera";
+
+        // Colunas padrão iguais ao displayColumns do frontend
+        let displayCols: string[];
+        if (input.indexType === "marcacao") {
+          displayCols = [
+            "codigo_solicitacao",
+            "no_usuario",
+            "telefone",
+            "nome_unidade_executante",
+            "descricao_interna_procedimento",
+            "descricao_sigtap_procedimento",
+            "nome_grupo_procedimento",
+            "codigo_classificacao_risco",
+            "status_solicitacao",
+            "data_marcacao",
+            "data_confirmacao",
+          ];
+        } else {
+          displayCols = [
+            "no_usuario",
+            "cns_usuario",
+            "telefone",
+            "nome_unidade_solicitante",
+            "descricao_interna_procedimento",
+            "nome_grupo_procedimento",
+            "codigo_classificacao_risco",
+            "sigla_situacao",
+            "data_solicitacao",
+            "__tempo_espera",
+            "nome_medico_solicitante",
+            "codigo_tipo_regulacao",
+          ];
+        }
+
         // Build XLSX with multiple sheets
         const wb = XLSX.utils.book_new();
 
-        // Sheet 1: "Dados" - all records
+        // Sheet 1: "Dados" - colunas iguais à tabela da tela
         if (allHits.length > 0) {
-          // Get all unique keys from hits
-          const allKeys = new Set<string>();
-          for (const hit of allHits) {
-            Object.keys(hit).forEach(k => allKeys.add(k));
+          const headers = displayCols.map(col => fieldLabelMap[col] || col);
+          const wsData: (string | number)[][] = [headers];
+
+          for (const hit of allHits as Record<string, unknown>[]) {
+            const row = displayCols.map(col => {
+              if (col === "__tempo_espera") {
+                return calcularTempoEsperaXlsx(hit.data_solicitacao);
+              }
+              return formatCellValueXlsx(col, hit[col], hit);
+            });
+            wsData.push(row);
           }
-          const headers = Array.from(allKeys).sort();
-          
-          const wsData = [headers];
-          for (const hit of allHits) {
-            wsData.push(headers.map(h => {
-              const val = hit[h];
-              return val === null || val === undefined ? "" : String(val);
-            }));
-          }
+
           const ws = XLSX.utils.aoa_to_sheet(wsData);
+          // Ajustar largura das colunas
+          ws["!cols"] = headers.map(h => ({ wch: Math.max(h.length + 2, 15) }));
           XLSX.utils.book_append_sheet(wb, ws, "Dados");
         }
 

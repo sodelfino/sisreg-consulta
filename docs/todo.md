@@ -152,3 +152,10 @@
 - [x] Clicar em especialidade navega para Consulta.tsx com filtro
 - [x] Filtro de consultas profissionais embutido (isConsultaProfissionalSaude)
 - [x] Testes passaram (140/142 - 2 falhas pré-existentes)
+
+## Bug Fix: Exportação Excel não corresponde à tabela da tela
+- [x] Analisar função de exportação Excel e colunas da tabela
+- [x] Garantir que as mesmas colunas visíveis na tela são exportadas
+- [x] Garantir que os valores formatados (labels, datas, situação) são iguais
+- [x] Incluir campos de contato (nome, telefone) na exportação
+- [x] Testar exportação e validar (18 testes passaram)
