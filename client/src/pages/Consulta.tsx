@@ -745,33 +745,39 @@ export default function Consulta() {
                   </div>
                 )}
 
-                {/* Filtro de Procedimentos */}
-                <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
-                  {/* Checkbox principal */}
-                  <div className="flex items-start space-x-3">
-                    <Checkbox
-                      id="apenasConsultasProfissionais"
-                      checked={apenasConsultasProfissionais}
-                      onCheckedChange={(checked) => setApenasConsultasProfissionais(!!checked)}
-                      className="mt-0.5"
-                    />
-                    <div className="flex-1">
-                      <label
-                        htmlFor="apenasConsultasProfissionais"
-                        className="text-sm font-medium cursor-pointer flex items-center gap-2"
-                      >
-                        <Stethoscope className="h-4 w-4 text-blue-600" />
-                        Mostrar apenas consultas com profissionais de saude
-                      </label>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Exclui automaticamente exames laboratoriais, de imagem e procedimentos diagnosticos
-                      </p>
-                    </div>
+                {/* Filtro de Procedimentos - Estrutura de Abas */}
+                <div className="space-y-3 rounded-lg border p-3">
+                  {/* Abas */}
+                  <div className="flex rounded-md overflow-hidden border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setApenasConsultasProfissionais(true)}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${
+                        apenasConsultasProfissionais
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-background text-muted-foreground hover:bg-accent'
+                      }`}
+                    >
+                      <Stethoscope className="h-3.5 w-3.5" />
+                      Consultas Profissionais
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setApenasConsultasProfissionais(false)}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors border-l border-border ${
+                        !apenasConsultasProfissionais
+                          ? 'bg-slate-700 text-white'
+                          : 'bg-background text-muted-foreground hover:bg-accent'
+                      }`}
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      Todos os Procedimentos
+                    </button>
                   </div>
 
-                  {/* Modo ativo: lista de consultas */}
+                  {/* Aba: Consultas Profissionais */}
                   {apenasConsultasProfissionais && (
-                    <div className="space-y-2 pl-7">
+                    <div className="space-y-2">
                       {/* Loading state */}
                       {loadingConsultas && (
                         <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
@@ -922,22 +928,22 @@ export default function Consulta() {
                     </div>
                   )}
 
-                  {/* Modo desativado: campo de texto livre */}
+                  {/* Aba: Todos os Procedimentos */}
                   {!apenasConsultasProfissionais && (
-                    <div className="space-y-1 pl-7">
-                      <Label htmlFor="procedimentoSearch" className="text-xs">Buscar Procedimento (texto livre)</Label>
+                    <div className="space-y-1">
+                      <Label htmlFor="procedimentoSearch" className="text-xs text-muted-foreground">Buscar por nome do procedimento</Label>
                       <div className="relative">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                           id="procedimentoSearch"
-                          placeholder="Digite parte do nome do procedimento..."
+                          placeholder="Ex: ENDOSCOPIA, USG ABDOME, CARDIOLOGIA..."
                           value={procedimentoSearch}
                           onChange={(e) => setProcedimentoSearch(e.target.value)}
                           className="h-9 pl-9"
                         />
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Busca parcial por descricao ou nome do procedimento (inclui exames e diagnosticos)
+                        Busca parcial — inclui consultas, exames, cirurgias e todos os procedimentos
                       </p>
                     </div>
                   )}

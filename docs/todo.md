@@ -159,3 +159,9 @@
 - [x] Garantir que os valores formatados (labels, datas, situação) são iguais
 - [x] Incluir campos de contato (nome, telefone) na exportação
 - [x] Testar exportação e validar (18 testes passaram)
+
+## QA - Bugs Críticos Identificados
+- [x] BUG 1: Endpoint search.listarConsultasProfissionais movido para router correto (search)
+- [x] BUG 2: Tolerância a falhas de decrypt — helper getPasswordOrThrow com mensagem amigável
+- [x] BUG 3: Substituído checkbox por estrutura de abas (Consultas Profissionais | Todos os Procedimentos)
+- [x] Testes corrigidos: 160/160 passando (0 falhas)

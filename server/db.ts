@@ -129,14 +129,32 @@ export function encryptPassword(password: string): string {
   return iv.toString('hex') + ':' + encrypted;
 }
 
-export function decryptPassword(encryptedPassword: string): string {
-  const [ivHex, encrypted] = encryptedPassword.split(':');
-  const iv = Buffer.from(ivHex, 'hex');
-  const key = getEncryptionKey();
-  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
+export function decryptPassword(encryptedPassword: string): string;
+export function decryptPassword(encryptedPassword: string, tolerant: true): string | null;
+export function decryptPassword(encryptedPassword: string, tolerant?: boolean): string | null {
+  try {
+    const [ivHex, encrypted] = encryptedPassword.split(':');
+    if (!ivHex || !encrypted) {
+      throw new Error('Formato de senha criptografada inválido');
+    }
+    const iv = Buffer.from(ivHex, 'hex');
+    const key = getEncryptionKey();
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (err) {
+    if (tolerant) {
+      console.warn('[decryptPassword] Falha ao descriptografar credenciais (chave diferente?). Retornando null.');
+      return null;
+    }
+    // Credenciais foram criptografadas com uma chave diferente (ex: após rotação de ENCRYPTION_KEY)
+    throw new Error(
+      'Não foi possível descriptografar as credenciais SISREG. ' +
+      'Isso ocorre quando a ENCRYPTION_KEY foi alterada. ' +
+      'Por favor, reconfigure suas credenciais SISREG nas configurações.'
+    );
+  }
 }
 
 // ============ SISREG Config Functions ============

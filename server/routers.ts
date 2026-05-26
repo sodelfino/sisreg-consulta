@@ -25,6 +25,19 @@ import * as XLSX from "xlsx";
 const indexTypeSchema = z.enum(["marcacao", "solicitacao"]);
 const queryModeSchema = z.enum(["quick", "novas", "agendadas", "atendidas", "fila"]);
 
+// Helper: descriptografa senha ou lança erro amigável
+function getPasswordOrThrow(encryptedPassword: string): string {
+  const pwd = decryptPassword(encryptedPassword, true);
+  if (pwd === null) {
+    throw new Error(
+      'Não foi possível descriptografar as credenciais SISREG. ' +
+      'A chave de criptografia pode ter sido alterada. ' +
+      'Por favor, acesse Configurações e reconfigure suas credenciais SISREG.'
+    );
+  }
+  return pwd;
+}
+
 // Shared search input schema
 const searchInputSchema = z.object({
   indexType: indexTypeSchema.default("marcacao"),
@@ -89,7 +102,7 @@ export const appRouter = router({
         if (!config) {
           return { ok: false, message: "Configuração não encontrada. Configure suas credenciais primeiro." };
         }
-        const password = decryptPassword(config.encryptedPassword);
+        const password = getPasswordOrThrow(config.encryptedPassword);
         return testSisregConnection({
           baseUrl: config.baseUrl,
           username: config.username,
@@ -109,7 +122,7 @@ export const appRouter = router({
         if (!config) {
           return { ok: false, doc: null, errorMessage: "Configuração não encontrada." };
         }
-        const password = decryptPassword(config.encryptedPassword);
+        const password = getPasswordOrThrow(config.encryptedPassword);
         const indexPath = input.indexType === "marcacao" 
           ? "/marcacao-ambulatorial-rj-macae/_search"
           : "/solicitacao-ambulatorial-rj-macae/_search";
@@ -134,7 +147,7 @@ export const appRouter = router({
         if (!config) {
           return { ok: false, total: 0, samples: [], fields: [], errorMessage: "Configuração não encontrada." };
         }
-        const password = decryptPassword(config.encryptedPassword);
+        const password = getPasswordOrThrow(config.encryptedPassword);
         const indexPath = input.indexType === "marcacao" 
           ? "/marcacao-ambulatorial-rj-macae/_search"
           : "/solicitacao-ambulatorial-rj-macae/_search";
@@ -156,7 +169,7 @@ export const appRouter = router({
         if (!config) {
           return { ok: false, values: [], errorMessage: "Configuração não encontrada." };
         }
-        const password = decryptPassword(config.encryptedPassword);
+        const password = getPasswordOrThrow(config.encryptedPassword);
         const indexPath = input.indexType === "marcacao" 
           ? "/marcacao-ambulatorial-rj-macae/_search"
           : "/solicitacao-ambulatorial-rj-macae/_search";
@@ -177,7 +190,7 @@ export const appRouter = router({
         if (!config) {
           return { ok: false, mapping: {}, errorMessage: "Configuração não encontrada." };
         }
-        const password = decryptPassword(config.encryptedPassword);
+        const password = getPasswordOrThrow(config.encryptedPassword);
         const indexName = input.indexType === "marcacao" 
           ? "marcacao-ambulatorial-rj-macae"
           : "solicitacao-ambulatorial-rj-macae";
@@ -204,7 +217,7 @@ export const appRouter = router({
           };
         }
 
-        const password = decryptPassword(config.encryptedPassword);
+        const password = getPasswordOrThrow(config.encryptedPassword);
         
         const result = await executeSisregSearch(
           { baseUrl: config.baseUrl, username: config.username, password },
@@ -252,7 +265,7 @@ export const appRouter = router({
           return { ok: false, error: "Configuração não encontrada.", data: null };
         }
 
-        const password = decryptPassword(config.encryptedPassword);
+        const password = getPasswordOrThrow(config.encryptedPassword);
         const credentials = { baseUrl: config.baseUrl, username: config.username, password };
 
         // Fetch all records via pagination
@@ -505,6 +518,32 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         return getQueryLogs(ctx.user.id, input?.limit || 50);
       }),
+
+    // Listar consultas com profissionais de saúde (filtrado dinamicamente)
+    listarConsultasProfissionais: protectedProcedure
+      .input(z.object({
+        indexType: indexTypeSchema.default("solicitacao"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const config = await getSisregConfig(ctx.user.id);
+          if (!config) {
+            return { ok: false, consultas: [], totalEncontrado: 0, totalAposFiltragem: 0, error: "Credenciais SISREG não configuradas" };
+          }
+
+          const credentials = {
+            baseUrl: config.baseUrl,
+            username: config.username,
+            password: getPasswordOrThrow(config.encryptedPassword),
+          };
+
+          const result = await listarConsultasProfissionaisDisponiveis(credentials, input.indexType);
+          return result;
+        } catch (error) {
+          console.error("[Search] Error listing consultas profissionais:", error);
+          return { ok: false, consultas: [], totalEncontrado: 0, totalAposFiltragem: 0, errorMessage: "Erro ao listar consultas" };
+        }
+      }),
   }),
 
   // Field Selections
@@ -571,7 +610,7 @@ export const appRouter = router({
           return { ok: false, error: "Configuração não encontrada.", data: null };
         }
 
-        const password = decryptPassword(config.encryptedPassword);
+        const password = getPasswordOrThrow(config.encryptedPassword);
         
         // Fetch dataset for aggregation (up to 10000 via pagination)
         const credentials = { baseUrl: config.baseUrl, username: config.username, password };
@@ -722,7 +761,7 @@ export const appRouter = router({
           return { ok: false, error: "Configuração não encontrada.", data: null };
         }
 
-        const password = decryptPassword(config.encryptedPassword);
+        const password = getPasswordOrThrow(config.encryptedPassword);
         const credentials = { baseUrl: config.baseUrl, username: config.username, password };
 
         // Buscar dados com paginação (até 10000)
@@ -867,7 +906,7 @@ export const appRouter = router({
           return { ok: false, error: "Configuração não encontrada.", data: null };
         }
 
-        const password = decryptPassword(config.encryptedPassword);
+        const password = getPasswordOrThrow(config.encryptedPassword);
         const credentials = { baseUrl: config.baseUrl, username: config.username, password };
 
         // Calcular período dos últimos 3 anos
@@ -1071,7 +1110,7 @@ Seja conciso mas informativo. Use formatação markdown para melhor legibilidade
           const credentials = {
             baseUrl: config.baseUrl,
             username: config.username,
-            password: decryptPassword(config.encryptedPassword),
+            password: getPasswordOrThrow(config.encryptedPassword),
           };
 
           // Buscar todas as solicitações na fila
@@ -1148,7 +1187,7 @@ Seja conciso mas informativo. Use formatação markdown para melhor legibilidade
           const credentials = {
             baseUrl: config.baseUrl,
             username: config.username,
-            password: decryptPassword(config.encryptedPassword),
+            password: getPasswordOrThrow(config.encryptedPassword),
           };
 
           // Buscar todas as solicitações na fila
@@ -1213,7 +1252,7 @@ Seja conciso mas informativo. Use formatação markdown para melhor legibilidade
           const credentials = {
             baseUrl: config.baseUrl,
             username: config.username,
-            password: decryptPassword(config.encryptedPassword),
+            password: getPasswordOrThrow(config.encryptedPassword),
           };
 
           // Buscar todas as solicitações na fila
@@ -1252,32 +1291,6 @@ Seja conciso mas informativo. Use formatação markdown para melhor legibilidade
         } catch (error) {
           console.error("[Metrics] Error listing procedures:", error);
           return { ok: false, data: [], error: "Erro ao listar procedimentos" };
-        }
-      }),
-
-    // Listar consultas com profissionais de saúde (filtrado dinamicamente)
-    listarConsultasProfissionais: protectedProcedure
-      .input(z.object({
-        indexType: indexTypeSchema.default("solicitacao"),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        try {
-          const config = await getSisregConfig(ctx.user.id);
-          if (!config) {
-            return { ok: false, consultas: [], totalEncontrado: 0, totalAposFiltragem: 0, error: "Credenciais SISREG não configuradas" };
-          }
-
-          const credentials = {
-            baseUrl: config.baseUrl,
-            username: config.username,
-            password: decryptPassword(config.encryptedPassword),
-          };
-
-          const result = await listarConsultasProfissionaisDisponiveis(credentials, input.indexType);
-          return result;
-        } catch (error) {
-          console.error("[Search] Error listing consultas profissionais:", error);
-          return { ok: false, consultas: [], totalEncontrado: 0, totalAposFiltragem: 0, errorMessage: "Erro ao listar consultas" };
         }
       }),
 
