@@ -523,6 +523,8 @@ export const appRouter = router({
     listarConsultasProfissionais: protectedProcedure
       .input(z.object({
         indexType: indexTypeSchema.default("solicitacao"),
+        dateStart: z.string().optional(),
+        dateEnd: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -537,7 +539,7 @@ export const appRouter = router({
             password: getPasswordOrThrow(config.encryptedPassword),
           };
 
-          const result = await listarConsultasProfissionaisDisponiveis(credentials, input.indexType);
+          const result = await listarConsultasProfissionaisDisponiveis(credentials, input.indexType, input.dateStart, input.dateEnd);
           return result;
         } catch (error) {
           console.error("[Search] Error listing consultas profissionais:", error);

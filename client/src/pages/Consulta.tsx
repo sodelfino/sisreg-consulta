@@ -169,7 +169,11 @@ export default function Consulta() {
 
   const handleCarregarConsultas = () => {
     setLoadingConsultas(true);
-    listarConsultasMutation.mutate({ indexType });
+    listarConsultasMutation.mutate({
+      indexType,
+      dateStart: dateStart || undefined,
+      dateEnd: dateEnd || undefined,
+    });
   };
 
   // Carregar consultas automaticamente quando checkbox está ativo e config disponível

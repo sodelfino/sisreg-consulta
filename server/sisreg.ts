@@ -423,20 +423,33 @@ export interface ListarConsultasResult {
 
 export async function listarConsultasProfissionaisDisponiveis(
   credentials: SisregCredentials,
-  indexType: IndexType
+  indexType: IndexType,
+  dateStart?: string,
+  dateEnd?: string
 ): Promise<ListarConsultasResult> {
   const { baseUrl, username, password } = credentials;
   const indexPath = getIndexPath(indexType);
   const url = `${baseUrl}${indexPath}`;
   const authHeader = "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
-
+  // Construir filtro de data se fornecido
+  const dateField = indexType === "solicitacao" ? "data_solicitacao" : "data_solicitacao";
+  const dateFilter = (dateStart && dateEnd) ? {
+    query: {
+      range: {
+        [dateField]: {
+          gte: dateStart,
+          lt: (() => { const d = new Date(dateEnd + "T00:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()
+        }
+      }
+    }
+  } : {};
   try {
     let esQuery: Record<string, unknown>;
-
     if (indexType === "solicitacao") {
       // Para solicitação: usar nested aggregation
       esQuery = {
         size: 0,
+        ...dateFilter,
         aggs: {
           procedimentos_nested: {
             nested: {
@@ -463,6 +476,7 @@ export async function listarConsultasProfissionaisDisponiveis(
       // Para marcação: usar agregação direta
       esQuery = {
         size: 0,
+        ...dateFilter,
         aggs: {
           descricao_interna: {
             terms: {
