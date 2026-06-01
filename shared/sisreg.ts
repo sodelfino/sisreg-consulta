@@ -257,18 +257,15 @@ export const SITUACAO_LABELS_CURTOS: Record<string, string> = {
   C: "Cancelada",
 };
 
-// Mapeamento completo: valores exatos do campo sigla_situacao.keyword no Elasticsearch
-// Estes são os valores que devem ser enviados no filtro de situação
+// Mapeamento completo: valores exatos do campo sigla_situacao no Elasticsearch
+// O campo armazena códigos de uma letra: P=Pendente, A=Agendada, C=Cancelada, N=Negada, D=Devolvida, R=Reenviada
 export const SITUACOES_SOLICITACAO = [
-  { value: "SOLICITAÇÃO / PENDENTE / FILA DE ESPERA", label: "Pendente — Fila de Espera" },
-  { value: "SOLICITAÇÃO / PENDENTE / REGULADOR", label: "Pendente — Regulador" },
-  { value: "SOLICITAÇÃO / REENVIADA / REGULADOR", label: "Reenviada — Regulador" },
-  { value: "SOLICITAÇÃO / AGENDADA / FILA DE ESPERA", label: "Agendada" },
-  { value: "SOLICITAÇÃO / AUTORIZADA / REGULADOR", label: "Autorizada" },
-  { value: "AGENDAMENTO / CONFIRMADO / EXECUTANTE", label: "Confirmada" },
-  { value: "SOLICITAÇÃO / DEVOLVIDA / SOLICITANTE", label: "Devolvida" },
-  { value: "SOLICITAÇÃO / NEGADA / REGULADOR", label: "Negada" },
-  { value: "SOLICITAÇÃO / CANCELADA / SOLICITANTE", label: "Cancelada" },
+  { value: "P", label: "Pendente" },
+  { value: "A", label: "Agendada" },
+  { value: "R", label: "Reenviada" },
+  { value: "D", label: "Devolvida" },
+  { value: "N", label: "Negada" },
+  { value: "C", label: "Cancelada" },
 ];
 
 // Mapeamento para exibição na tabela (valor completo -> label curto)

@@ -234,9 +234,9 @@ function buildQuerySolicitacaoAmbulatorial(
     mustClauses.push({ terms: { "codigo_classificacao_risco": riscoFilter } });
   }
 
-  // Situação filter (solicitação usa sigla_situacao.keyword)
+  // Situação filter (sigla_situacao usa códigos de uma letra: P, A, C, N, D, R)
   if (situacaoFilter && situacaoFilter.length > 0) {
-    mustClauses.push({ terms: { "sigla_situacao.keyword": situacaoFilter } });
+    mustClauses.push({ terms: { "sigla_situacao": situacaoFilter } });
   }
 
   // Procedimento search com múltiplos campos (busca por frase)
@@ -339,6 +339,9 @@ export async function executeSisregSearch(
   const url = `${baseUrl}${indexPath}`;
   const esQuery = buildElasticsearchQuery(input);
   const authHeader = "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
+  // Diagnóstico: logar query quando filtros estão presentes
+  if (input.situacaoFilter && input.situacaoFilter.length > 0) {
+  }
 
   try {
     const controller = new AbortController();
@@ -382,7 +385,12 @@ export async function executeSisregSearch(
     }
 
     const hits = data.hits?.hits?.map((hit) => hit._source || {}) || [];
-
+    // Diagnóstico: logar resposta quando situacaoFilter está presente
+    if (input.situacaoFilter && input.situacaoFilter.length > 0) {
+      if (hits.length > 0) {
+        const firstHit = hits[0] as Record<string, unknown>;
+      }
+    }
     return { ok: true, status: response.status, took: data.took, total, hits };
   } catch (error) {
     console.error("[SISREG] Query error:", error);

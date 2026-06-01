@@ -87,7 +87,9 @@ export default function Consulta() {
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
   const [procedimentoSearch, setProcedimentoSearch] = useState("");
-  const [situacaoFilter, setSituacaoFilter] = useState<string[]>([]);
+  const [situacaoFilter, setSituacaoFilter] = useState<string[]>(
+    initialType === "solicitacao" ? ["P"] : []
+  );
   const [riscoFilter, setRiscoFilter] = useState<string[]>([]);
 
   // Consultas com profissionais de saúde
@@ -195,6 +197,8 @@ export default function Consulta() {
     setSelectedFields([]);
     setConsultasDisponiveis([]);
     setConsultasSelecionadas([]);
+    // Filtro padrão: Pendente para solicitações
+    setSituacaoFilter(newType === "solicitacao" ? ["P"] : []);
   };
 
   // Handle search

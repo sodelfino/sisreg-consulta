@@ -165,3 +165,11 @@
 - [x] BUG 2: Tolerância a falhas de decrypt — helper getPasswordOrThrow com mensagem amigável
 - [x] BUG 3: Substituído checkbox por estrutura de abas (Consultas Profissionais | Todos os Procedimentos)
 - [x] Testes corrigidos: 160/160 passando (0 falhas)
+
+## Correção do Filtro de Situação (Solicitações Ambulatoriais)
+- [x] Diagnosticar valores reais do campo sigla_situacao no ES (códigos: P, A, C, N, D, R)
+- [x] Corrigir SITUACOES_SOLICITACAO para usar códigos de uma letra
+- [x] Corrigir query ES para usar `sigla_situacao` (sem .keyword)
+- [x] Definir "Pendente (P)" como filtro padrão ao abrir Solicitações Ambulatoriais
+- [x] Resetar filtro para "Pendente" ao trocar para indexType solicitacao
+- [x] Remover logs de debug temporários do sisreg.ts
