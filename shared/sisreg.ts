@@ -260,12 +260,12 @@ export const SITUACAO_LABELS_CURTOS: Record<string, string> = {
 // Mapeamento completo: valores exatos do campo sigla_situacao no Elasticsearch
 // O campo armazena códigos de uma letra: P=Pendente, A=Agendada, C=Cancelada, N=Negada, D=Devolvida, R=Reenviada
 export const SITUACOES_SOLICITACAO = [
-  { value: "P", label: "Pendente" },
-  { value: "A", label: "Agendada" },
-  { value: "R", label: "Reenviada" },
-  { value: "D", label: "Devolvida" },
-  { value: "N", label: "Negada" },
-  { value: "C", label: "Cancelada" },
+  { value: "P", label: "Solicitação / Pendente / Fila de Espera" },
+  { value: "R", label: "Solicitação / Pendente / Regulação" },
+  { value: "A", label: "Solicitação / Agendada" },
+  { value: "D", label: "Solicitação / Devolvida" },
+  { value: "N", label: "Solicitação / Negada" },
+  { value: "C", label: "Solicitação / Cancelada" },
 ];
 
 // Mapeamento para exibição na tabela (valor completo -> label curto)

@@ -341,6 +341,8 @@ export async function executeSisregSearch(
   const authHeader = "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
   // Diagnóstico: logar query quando filtros estão presentes
   if (input.situacaoFilter && input.situacaoFilter.length > 0) {
+    console.log('[SISREG DEBUG] situacaoFilter:', JSON.stringify(input.situacaoFilter));
+    console.log('[SISREG DEBUG] esQuery:', JSON.stringify(esQuery));
   }
 
   try {
@@ -387,8 +389,10 @@ export async function executeSisregSearch(
     const hits = data.hits?.hits?.map((hit) => hit._source || {}) || [];
     // Diagnóstico: logar resposta quando situacaoFilter está presente
     if (input.situacaoFilter && input.situacaoFilter.length > 0) {
+      console.log('[SISREG DEBUG] resposta total:', total, 'hits:', hits.length, 'filtro:', JSON.stringify(input.situacaoFilter));
       if (hits.length > 0) {
         const firstHit = hits[0] as Record<string, unknown>;
+        console.log('[SISREG DEBUG] primeiro hit sigla_situacao:', firstHit.sigla_situacao);
       }
     }
     return { ok: true, status: response.status, took: data.took, total, hits };
