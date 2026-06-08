@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
@@ -1254,8 +1255,33 @@ export default function Consulta() {
               </Card>
             )}
 
+            {/* Loading Skeleton */}
+            {isSearching && (
+              <Card>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">Buscando registros...</span>
+                  </div>
+                  <div className="flex gap-3 mb-4">
+                    <Skeleton className="h-6 w-28" />
+                    <Skeleton className="h-6 w-36" />
+                    <Skeleton className="h-6 w-20" />
+                  </div>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex gap-4 py-1">
+                      <Skeleton className="h-4 flex-1" style={{ maxWidth: `${[140,200,100,160,90,120][i%6]}px` }} />
+                      <Skeleton className="h-4 flex-1" style={{ maxWidth: `${[200,140,180,100,160,140][i%6]}px` }} />
+                      <Skeleton className="h-4 flex-1" style={{ maxWidth: `${[100,160,120,200,140,100][i%6]}px` }} />
+                      <Skeleton className="h-4 flex-1" style={{ maxWidth: `${[160,100,200,140,120,180][i%6]}px` }} />
+                      <Skeleton className="h-4 flex-1" style={{ maxWidth: "80px" }} />
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
             {/* Results Table */}
-            {results?.ok && results.hits.length > 0 && (
+            {!isSearching && results?.ok && results.hits.length > 0 && (
               <Card>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
@@ -1302,7 +1328,7 @@ export default function Consulta() {
             )}
 
             {/* Empty State */}
-            {results?.ok && results.hits.length === 0 && (
+            {!isSearching && results?.ok && results.hits.length === 0 && (
               <Card>
                 <CardContent className="py-12 text-center">
                   <Database className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -1315,7 +1341,7 @@ export default function Consulta() {
             )}
 
             {/* No Results Yet */}
-            {!results && (
+            {!isSearching && !results && (
               <Card>
                 <CardContent className="py-12 text-center">
                   <Search className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
