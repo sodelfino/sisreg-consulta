@@ -266,3 +266,42 @@ export async function deleteFieldSelection(id: number, userId: number) {
 
   await db.delete(fieldSelections).where(eq(fieldSelections.id, id));
 }
+
+// ── Access Requests ──────────────────────────────────────────────────────────
+import { accessRequests, InsertAccessRequest } from "../drizzle/schema";
+
+export async function createAccessRequest(data: InsertAccessRequest) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(accessRequests).values(data);
+}
+
+export async function getAccessRequests(status?: "pendente" | "aprovado" | "rejeitado") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (status) {
+    return db.select().from(accessRequests).where(eq(accessRequests.status, status)).orderBy(desc(accessRequests.createdAt));
+  }
+  return db.select().from(accessRequests).orderBy(desc(accessRequests.createdAt));
+}
+
+export async function countPendingAccessRequests() {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select().from(accessRequests).where(eq(accessRequests.status, "pendente"));
+  return rows.length;
+}
+
+export async function updateAccessRequestStatus(
+  id: number,
+  status: "aprovado" | "rejeitado",
+  reviewedBy: number,
+  motivoRejeicao?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(accessRequests)
+    .set({ status, reviewedBy, reviewedAt: new Date(), motivoRejeicao: motivoRejeicao ?? null })
+    .where(eq(accessRequests.id, id));
+}

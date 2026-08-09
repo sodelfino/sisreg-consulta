@@ -72,3 +72,23 @@ export const fieldSelections = mysqlTable("field_selections", {
 
 export type FieldSelection = typeof fieldSelections.$inferSelect;
 export type InsertFieldSelection = typeof fieldSelections.$inferInsert;
+
+/**
+ * Access requests - equipe solicita acesso, admin aprova/rejeita
+ */
+export const accessRequests = mysqlTable("access_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  nome: varchar("nome", { length: 256 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  cargo: varchar("cargo", { length: 256 }).notNull(),
+  justificativa: text("justificativa").notNull(),
+  status: mysqlEnum("status", ["pendente", "aprovado", "rejeitado"]).default("pendente").notNull(),
+  motivoRejeicao: text("motivoRejeicao"),
+  reviewedBy: int("reviewedBy"),
+  reviewedAt: timestamp("reviewedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AccessRequest = typeof accessRequests.$inferSelect;
+export type InsertAccessRequest = typeof accessRequests.$inferInsert;

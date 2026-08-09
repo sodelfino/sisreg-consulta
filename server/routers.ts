@@ -14,6 +14,10 @@ import {
   createFieldSelection,
   updateFieldSelection,
   deleteFieldSelection,
+  createAccessRequest,
+  getAccessRequests,
+  countPendingAccessRequests,
+  updateAccessRequestStatus,
 } from "./db";
 import { executeSisregSearch, testSisregConnection, listarConsultasProfissionaisDisponiveis } from "./sisreg";
 import { isConsultaProfissionalSaude, PREFIXOS_CONSULTA_VALIDOS, SITUACAO_LABELS, RISK_LABELS, ALL_FIELDS_MARCACAO, ALL_FIELDS_SOLICITACAO } from "../shared/sisreg";
@@ -1296,5 +1300,63 @@ Seja conciso mas informativo. Use formatação markdown para melhor legibilidade
         }
       }),
 
+  }),
+
+  // Access Requests
+  access: router({
+    solicitar: publicProcedure
+      .input(z.object({
+        nome: z.string().min(3).max(256),
+        email: z.string().email().max(320),
+        cargo: z.string().min(2).max(256),
+        justificativa: z.string().min(10).max(2000),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          await createAccessRequest({
+            nome: input.nome,
+            email: input.email,
+            cargo: input.cargo,
+            justificativa: input.justificativa,
+          });
+          try {
+            const { notifyOwner } = await import("./_core/notification");
+            await notifyOwner({
+              title: `Nova solicitacao de acesso`,
+              content: `${input.nome} (${input.cargo}) solicitou acesso.\nEmail: ${input.email}\nJustificativa: ${input.justificativa}`,
+            });
+          } catch (_) {}
+          return { ok: true };
+        } catch (error: any) {
+          return { ok: false, error: error.message };
+        }
+      }),
+
+    listar: protectedProcedure
+      .input(z.object({ status: z.enum(["pendente", "aprovado", "rejeitado", "todos"]).optional() }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new Error("Acesso negado");
+        const status = input.status === "todos" ? undefined : input.status;
+        const rows = await getAccessRequests(status as any);
+        return rows;
+      }),
+
+    contarPendentes: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") return 0;
+        return countPendingAccessRequests();
+      }),
+
+    revisar: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        acao: z.enum(["aprovado", "rejeitado"]),
+        motivoRejeicao: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new Error("Acesso negado");
+        await updateAccessRequestStatus(input.id, input.acao, ctx.user.id, input.motivoRejeicao);
+        return { ok: true };
+      }),
   }),
 });

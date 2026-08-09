@@ -9,6 +9,7 @@ import Consulta from "./pages/Consulta";
 import Configuracao from "./pages/Configuracao";
 import Dashboard from "./pages/Dashboard";
 import Explore from "./pages/Explore";
+import SolicitarAcesso from "./pages/SolicitarAcesso";
 
 function Router() {
   return (
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/configuracao" component={Configuracao} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/explore" component={Explore} />
+      <Route path="/solicitar-acesso" component={SolicitarAcesso} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
