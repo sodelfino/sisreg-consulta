@@ -319,6 +319,10 @@ export default function Consulta() {
 
   const handleExportXlsx = () => {
     if (!configQuery.data) return;
+    // Determinar procedimentoSearch: se tem consultas selecionadas, usar elas separadas por "|"
+    const procedimentoSearchExport = consultasSelecionadas.length > 0
+      ? consultasSelecionadas.join("|")
+      : procedimentoSearch.trim() || undefined;
     exportXlsxMutation.mutate({
       indexType,
       mode,
@@ -326,10 +330,12 @@ export default function Consulta() {
       from: 0,
       dateStart: dateStart || undefined,
       dateEnd: dateEnd || undefined,
-      procedimentoSearch: procedimentoSearch.trim() || undefined,
+      procedimentoSearch: procedimentoSearchExport,
+      situacaoFilter: situacaoFilter.length > 0 ? situacaoFilter : undefined,
+      riscoFilter: riscoFilter.length > 0 ? riscoFilter : undefined,
       exportAllPages: true,
     });
-  };
+  }
 
   // Export to CSV
   const handleExportCSV = () => {
