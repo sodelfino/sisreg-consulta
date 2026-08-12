@@ -344,3 +344,68 @@ export function isConsultaProfissionalSaude(descricao: string): boolean {
   const contemExclusao = TERMOS_EXCLUIR_NAO_CONSULTA.some(termo => upper.includes(termo));
   return !contemExclusao;
 }
+
+// ============================================================
+// TABELA DE-PARA DE ESPECIALIDADES (SIGTAP / CÓDIGO INTERNO)
+// ============================================================
+
+export interface EspecialidadeMapping {
+  prefixo: string;
+  especialidade: string;
+  grupoSigtap?: string;
+}
+
+export const SIGTAP_ESPECIALIDADE_MAP: EspecialidadeMapping[] = [
+  { prefixo: "CARDIOLOGIA", especialidade: "Cardiologia" },
+  { prefixo: "ORTOPEDIA", especialidade: "Ortopedia e Traumatologia" },
+  { prefixo: "TRAUMATOLOGIA", especialidade: "Ortopedia e Traumatologia" },
+  { prefixo: "OFTALMOLOGIA", especialidade: "Oftalmologia" },
+  { prefixo: "PEDIATRIA", especialidade: "Pediatria" },
+  { prefixo: "GINECOLOGIA", especialidade: "Ginecologia e Obstetrícia" },
+  { prefixo: "OBSTETRICIA", especialidade: "Ginecologia e Obstetrícia" },
+  { prefixo: "DERMATOLOGIA", especialidade: "Dermatologia" },
+  { prefixo: "NEUROLOGIA", especialidade: "Neurologia" },
+  { prefixo: "PSIQUIATRIA", especialidade: "Psiquiatria" },
+  { prefixo: "ENDOCRINOLOGIA", especialidade: "Endocrinologia e Metabologia" },
+  { prefixo: "GASTROENTEROLOGIA", especialidade: "Gastroenterologia" },
+  { prefixo: "NEFROLOGIA", especialidade: "Nefrologia" },
+  { prefixo: "PNEUMOLOGIA", especialidade: "Pneumologia" },
+  { prefixo: "REUMATOLOGIA", especialidade: "Reumatologia" },
+  { prefixo: "UROLOGIA", especialidade: "Urologia" },
+  { prefixo: "GERIATRIA", especialidade: "Geriatria" },
+  { prefixo: "ONCOLOGIA", especialidade: "Oncologia" },
+  { prefixo: "OTORRINOLARINGOLOGIA", especialidade: "Otorrinolaringologia" },
+  { prefixo: "OTORRINO", especialidade: "Otorrinolaringologia" },
+  { prefixo: "FISIOTERAPIA", especialidade: "Fisioterapia" },
+  { prefixo: "FONOAUDIOLOGIA", especialidade: "Fonoaudiologia" },
+  { prefixo: "NUTRICAO", especialidade: "Nutrição" },
+  { prefixo: "PSICOLOGIA", especialidade: "Psicologia" },
+  { prefixo: "CIRURGIA", especialidade: "Cirurgia Geral" },
+];
+
+/**
+ * Normaliza a descrição de um procedimento para uma especialidade unificada usando a tabela de-para.
+ */
+export function normalizarEspecialidade(descricao: string, codigoSigtap?: string): string {
+  if (!descricao) return "Outras Especialidades";
+  const upper = descricao.toUpperCase();
+
+  // Se o código SIGTAP começar com 0301 (consultas) ou 0302 (fisioterapia/terapias)
+  if (codigoSigtap && codigoSigtap.startsWith("0301")) {
+    // Tentar match por prefixos conhecidos
+    for (const mapping of SIGTAP_ESPECIALIDADE_MAP) {
+      if (upper.includes(mapping.prefixo)) {
+        return mapping.especialidade;
+      }
+    }
+  }
+
+  // Busca genérica por substring na descrição
+  for (const mapping of SIGTAP_ESPECIALIDADE_MAP) {
+    if (upper.includes(mapping.prefixo)) {
+      return mapping.especialidade;
+    }
+  }
+
+  return "Outras Especialidades / Procedimentos";
+}

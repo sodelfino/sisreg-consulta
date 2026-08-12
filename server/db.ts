@@ -305,3 +305,29 @@ export async function updateAccessRequestStatus(
     .set({ status, reviewedBy, reviewedAt: new Date(), motivoRejeicao: motivoRejeicao ?? null })
     .where(eq(accessRequests.id, id));
 }
+
+// ── LGPD Audit & Alerts ──────────────────────────────────────────────────────
+export async function logAuditAccess(data: {
+  userId: number;
+  acao: string;
+  detalhes: string;
+  ip?: string;
+}) {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    // Registrar log de auditoria sensível
+    console.log(`[LGPD AUDIT] User #${data.userId} - ${data.acao}: ${data.detalhes}`);
+    
+    // Disparar notificação ao owner em caso de acesso sensível em massa ou exportação
+    if (data.acao.includes("EXPORT") || data.acao.includes("SENSITIVE_ACCESS")) {
+      const { notifyOwner } = await import("./_core/notification");
+      await notifyOwner({
+        title: `🚨 Alerta LGPD: ${data.acao}`,
+        content: `Usuário ID ${data.userId} realizou ação sensível.\nDetalhes: ${data.detalhes}\nHorário: ${new Date().toLocaleString("pt-BR")}`,
+      });
+    }
+  } catch (err) {
+    console.error("[LGPD AUDIT] Failed to log audit:", err);
+  }
+}

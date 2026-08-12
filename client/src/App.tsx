@@ -10,6 +10,7 @@ import Configuracao from "./pages/Configuracao";
 import Dashboard from "./pages/Dashboard";
 import Explore from "./pages/Explore";
 import SolicitarAcesso from "./pages/SolicitarAcesso";
+import AdminAcessos from "./pages/AdminAcessos";
 
 function Router() {
   return (
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/explore" component={Explore} />
       <Route path="/solicitar-acesso" component={SolicitarAcesso} />
+      <Route path="/admin/acessos" component={AdminAcessos} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
