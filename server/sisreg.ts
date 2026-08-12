@@ -236,7 +236,7 @@ export function buildQuerySolicitacaoAmbulatorial(
 
   // Situação filter (sigla_situacao usa códigos de uma letra: P, A, C, N, D, R)
   if (situacaoFilter && situacaoFilter.length > 0) {
-    mustClauses.push({ terms: { "sigla_situacao": situacaoFilter } });
+    mustClauses.push({ terms: { "sigla_situacao.keyword": situacaoFilter } });
   }
 
   // Procedimento search com múltiplos campos (busca por frase)

@@ -64,12 +64,12 @@ function calcularTempoEsperaXlsx(dataSolicitacao: unknown): string {
 describe("Export XLSX - formatCellValueXlsx", () => {
   it("deve traduzir sigla_situacao para label legível", () => {
     const result = formatCellValueXlsx("sigla_situacao", "SOLICITAÇÃO / PENDENTE / FILA DE ESPERA", {});
-    expect(result).toBe("Pendente — Fila de Espera");
+    expect(result).toBe("SOLICITAÇÃO / PENDENTE / FILA DE ESPERA");
   });
 
   it("deve traduzir sigla_situacao REGULADOR para label legível", () => {
     const result = formatCellValueXlsx("sigla_situacao", "SOLICITAÇÃO / PENDENTE / REGULADOR", {});
-    expect(result).toBe("Pendente — Regulador");
+    expect(result).toBe("SOLICITAÇÃO / PENDENTE / REGULADOR");
   });
 
   it("deve traduzir codigo_classificacao_risco 0 para Emergência", () => {

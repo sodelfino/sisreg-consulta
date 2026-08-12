@@ -131,6 +131,7 @@ export const DEFAULT_FIELDS_SOLICITACAO = {
     "nome_medico_solicitante",
     "cpf_profissional_solicitante",
     "sigla_situacao",
+    "status_solicitacao",
     "codigo_interno_procedimento",
     "descricao_interna_procedimento",
     "descricao_sigtap_procedimento",
